@@ -1679,6 +1679,7 @@ function simulator() {
 
     // ===== Charts / 차트 =====
     // CHART_INSTANCES (모듈 레벨)에 저장해 Alpine Proxy 회피.
+    // 옵션은 매번 fresh 객체를 만들어 Chart.js의 내부 mutate가 다른 차트에 전파되지 않도록 격리.
     initCharts() {
       try {
         const colors = { coal: '#d55e00', isotes: '#0072b2', pv: '#e6c200', etc: '#009e73' };
@@ -1686,11 +1687,19 @@ function simulator() {
         const altColors  = [colors.isotes, colors.pv, colors.etc];
         const techLabels = [this.t('coal'), this.t('isotesGrid'), this.t('pvIsotes'), this.t('etcIsotes')];
         const altLabels  = [this.t('isotesGrid'), this.t('pvIsotes'), this.t('etcIsotes')];
-        const commonOpts = {
-          responsive: true, maintainAspectRatio: false, animation: false,
+
+        // 팩토리: 매 호출마다 새로운 옵션 객체 (Chart.js mutate로부터 격리)
+        const makeOpts = (horizontal) => ({
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: false,
+          indexAxis: horizontal ? 'y' : 'x',
           plugins: { legend: { display: false }, tooltip: { enabled: true } },
-          scales: { y: { ticks: { font: { size: 10 } } }, x: { ticks: { font: { size: 10 } } } }
-        };
+          scales: {
+            y: { ticks: { font: { size: 10 } } },
+            x: { ticks: { font: { size: 10 } } }
+          }
+        });
         const r = this.r;
 
         const lcohEl = document.getElementById('lcohChart');
@@ -1713,29 +1722,29 @@ function simulator() {
           data: { labels: techLabels,
                   datasets: [{ label: 'LCOH', data: [r.lcoh.coal||0, r.lcoh.isotes||0, r.lcoh.pv||0, r.lcoh.etc||0],
                                backgroundColor: techColors }] },
-          options: { ...commonOpts, indexAxis: 'y' }
+          options: makeOpts(true)
         });
         CHART_INSTANCES.npv = new Chart(npvEl, {
           type: 'bar',
           data: { labels: altLabels,
                   datasets: [{ label: 'NPV', data: [r.npv.isotes||0, r.npv.pv||0, r.npv.etc||0],
                                backgroundColor: altColors }] },
-          options: { ...commonOpts, indexAxis: 'y' }
+          options: makeOpts(true)
         });
         CHART_INSTANCES.cost = new Chart(costEl, {
           type: 'bar',
           data: { labels: techLabels,
                   datasets: [{ label: 'Cost', data: [r.net.coal||0, r.net.isotes||0, r.net.pv||0, r.net.etc||0],
                                backgroundColor: techColors }] },
-          options: commonOpts
+          options: makeOpts(false)
         });
         CHART_INSTANCES.co2 = new Chart(co2El, {
           type: 'bar',
           data: { labels: altLabels,
-                  datasets: [{ label: 'CO₂ saved (tCO₂/yr)',
+                  datasets: [{ label: 'CO2 saved (tCO2/yr)',
                                data: [r.co2.isotes||0, r.co2.pv||0, r.co2.etc||0],
                                backgroundColor: altColors }] },
-          options: { ...commonOpts, indexAxis: 'y' }
+          options: makeOpts(true)
         });
 
         this.chartsReady = true;
