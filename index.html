@@ -1730,11 +1730,12 @@ function simulator() {
           options: commonOpts
         });
         CHART_INSTANCES.co2 = new Chart(co2El, {
-          type: 'doughnut',
+          type: 'bar',
           data: { labels: altLabels,
-                  datasets: [{ data: [r.co2.isotes||0, r.co2.pv||0, r.co2.etc||0], backgroundColor: altColors }] },
-          options: { responsive: true, maintainAspectRatio: false, animation: false,
-                     plugins: { legend: { position: 'right', labels: { font: { size: 10 } } } } }
+                  datasets: [{ label: 'CO₂ saved (tCO₂/yr)',
+                               data: [r.co2.isotes||0, r.co2.pv||0, r.co2.etc||0],
+                               backgroundColor: altColors }] },
+          options: { ...commonOpts, indexAxis: 'y' }
         });
 
         this.chartsReady = true;
