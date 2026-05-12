@@ -1,0 +1,1811 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GIGAette Mongolia Heating Simulator / 몽골 난방 사업성 시뮬레이터</title>
+<!-- 모델 SSoT: build_model.py / heating_business_model_v1.xlsx v1.3 -->
+<!-- 오프라인 사용 시: CDN 두 줄을 같은 폴더에 다운로드 후 src 경로 변경 -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --ink: #1e2530;
+    --muted: #6b7785;
+    --border: #e3e6ea;
+    --accent: #2156a5;
+    --accent-soft: #e8f0fb;
+    --good: #2e8540;
+    --bad: #c0392b;
+    --warn: #b07b00;
+    /* Okabe-Ito palette */
+    --c-coal: #d55e00;
+    --c-isotes: #0072b2;
+    --c-pv:    #e6c200;
+    --c-etc:   #009e73;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'Segoe UI', 'Malgun Gothic', 'Apple SD Gothic Neo', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    font-size: 13px;
+  }
+  [x-cloak] { display: none !important; }
+  header.app {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  header.app h1 { margin: 0; font-size: 16px; font-weight: 700; line-height: 1.2; }
+  header.app h1 .sub { font-size: 11px; color: var(--muted); font-weight: 500; display: block; }
+  header.app .badge {
+    font-size: 11px; padding: 2px 6px;
+    background: var(--accent-soft); color: var(--accent); border-radius: 4px;
+  }
+  header.app .spacer { flex: 1; }
+  header.app .toggle-group { display: flex; gap: 4px; }
+  header.app .toggle-group button {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    cursor: pointer;
+    font-size: 11px;
+  }
+  header.app .toggle-group button.on {
+    background: var(--accent); color: white; border-color: var(--accent);
+  }
+  header.app .action-btn {
+    padding: 4px 12px;
+    background: var(--accent); color: white;
+    border: none; cursor: pointer; border-radius: 4px;
+    font-size: 11px;
+  }
+  header.app .action-btn.secondary { background: var(--muted); }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 320px 1fr 250px;
+    gap: 12px;
+    padding: 12px;
+    min-height: calc(100vh - 90px);
+  }
+  @media (max-width: 1200px) {
+    .layout { grid-template-columns: 300px 1fr; }
+    .layout > .presets { grid-column: 1 / -1; order: 3; max-height: 240px; }
+  }
+  @media (max-width: 800px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+  aside.params, section.results, aside.presets {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+  }
+  aside.params { max-height: calc(100vh - 110px); overflow-y: auto; }
+  aside.presets { max-height: calc(100vh - 110px); overflow-y: auto; }
+  .group-title {
+    font-weight: 700;
+    font-size: 11px;
+    color: var(--muted);
+    margin: 12px 0 6px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .group-title:first-child { margin-top: 0; }
+  details { margin-bottom: 8px; }
+  details > summary { cursor: pointer; outline: none; user-select: none; list-style: none; }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::before { content: '▸ '; color: var(--muted); }
+  details[open] summary::before { content: '▾ '; }
+  .slider-row {
+    display: grid;
+    grid-template-columns: 1fr 64px;
+    gap: 6px;
+    align-items: center;
+    padding: 4px 0;
+  }
+  .slider-row label {
+    grid-column: 1 / -1;
+    display: flex; justify-content: space-between; gap: 6px;
+    font-size: 11px;
+    color: var(--ink);
+    font-weight: 500;
+  }
+  .slider-row label .unit { color: var(--muted); font-weight: normal; }
+  .slider-row label .cell-ref { color: #a0a0a0; font-size: 9px; font-weight: normal; }
+  .slider-row input[type=range] { width: 100%; accent-color: var(--accent); }
+  .slider-row input[type=number] {
+    width: 64px;
+    padding: 2px 4px;
+    font-size: 11px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    text-align: right;
+  }
+  .toggle-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 4px 0;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .toggle-row input[type=checkbox] { transform: scale(1.2); }
+
+  .meta-bar {
+    background: var(--accent-soft);
+    border-radius: 4px;
+    padding: 6px 10px;
+    margin-bottom: 10px;
+    font-size: 11px;
+    color: var(--accent);
+    display: flex; flex-wrap: wrap; gap: 12px;
+  }
+  .meta-bar strong { color: var(--ink); }
+
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+  .kpi {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--c-isotes);
+    border-radius: 5px;
+    padding: 10px;
+  }
+  .kpi .kpi-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+  .kpi .kpi-value { font-size: 18px; font-weight: 700; color: var(--ink); }
+  .kpi .kpi-sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .kpi.good .kpi-value { color: var(--good); }
+  .kpi.bad .kpi-value { color: var(--bad); }
+
+  .results-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 12px;
+    font-size: 12px;
+  }
+  .results-table th, .results-table td {
+    padding: 5px 8px;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+  }
+  .results-table th:first-child, .results-table td:first-child {
+    text-align: left; color: var(--muted); font-weight: 500;
+  }
+  .results-table thead th {
+    background: var(--bg);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    color: var(--muted);
+  }
+  .results-table thead th.coal { color: var(--c-coal); }
+  .results-table thead th.isotes { color: var(--c-isotes); }
+  .results-table thead th.pv { color: #b0a020; }
+  .results-table thead th.etc { color: var(--c-etc); }
+  .results-table .pos { color: var(--good); }
+  .results-table .neg { color: var(--bad); }
+  .results-table strong { color: var(--ink); }
+
+  .chart-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 900px) { .chart-grid { grid-template-columns: 1fr; } }
+  .chart-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 10px;
+  }
+  .chart-card h3 {
+    margin: 0 0 8px;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .chart-canvas-wrap { position: relative; height: 220px; }
+
+  .preset-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 6px 8px;
+    margin-bottom: 4px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+  }
+  .preset-item:hover { background: var(--accent-soft); border-color: var(--accent); }
+  .preset-item .preset-name { font-weight: 600; display: block; }
+  .preset-item .preset-desc { font-size: 10px; color: var(--muted); }
+  .preset-item.active { background: var(--accent); color: white; }
+  .preset-item.active .preset-desc { color: #d4e3f7; }
+
+  footer.app {
+    padding: 8px 16px;
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--muted);
+    display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  }
+  footer.app code { background: var(--bg); padding: 0 4px; border-radius: 2px; }
+  footer.app a { color: var(--accent); }
+
+  .verify-banner {
+    background: var(--warn);
+    color: white;
+    padding: 8px 16px;
+    text-align: center;
+    font-size: 12px;
+  }
+  .verify-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 11px;
+  }
+  .verify-table th, .verify-table td {
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    text-align: right;
+  }
+  .verify-table th:first-child, .verify-table td:first-child { text-align: left; }
+  .verify-table .pass { background: #e6f4ea; color: var(--good); font-weight: 600; }
+  .verify-table .fail { background: #fce8e6; color: var(--bad); font-weight: 600; }
+
+  /* Tutorial modal / 튜토리얼 모달 */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(20, 30, 50, 0.6);
+    z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px;
+  }
+  .modal {
+    background: var(--panel);
+    border-radius: 8px;
+    max-width: 900px;
+    width: 100%;
+    max-height: 90vh;
+    display: flex; flex-direction: column;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  }
+  .modal-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .modal-header h2 { margin: 0; font-size: 16px; flex: 1; }
+  .modal-header .modal-close {
+    background: none; border: none; cursor: pointer; font-size: 20px;
+    color: var(--muted); padding: 0 6px;
+  }
+  .modal-tabs {
+    display: flex; border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .modal-tabs button {
+    padding: 8px 14px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .modal-tabs button.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+  }
+  .modal-body {
+    padding: 16px 24px;
+    overflow-y: auto;
+    flex: 1;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .modal-body h3 { margin: 16px 0 8px; font-size: 14px; color: var(--accent); }
+  .modal-body h3:first-child { margin-top: 0; }
+  .modal-body ul, .modal-body ol { padding-left: 22px; margin: 6px 0; }
+  .modal-body li { margin-bottom: 4px; }
+  .modal-body kbd {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: monospace;
+    font-size: 11px;
+  }
+  .modal-body .tip {
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    padding: 8px 12px;
+    margin: 10px 0;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  .modal-body .warn {
+    background: #fff8e6;
+    border-left: 3px solid var(--warn);
+    padding: 8px 12px;
+    margin: 10px 0;
+    border-radius: 3px;
+    font-size: 12px;
+  }
+  .modal-body table {
+    width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px;
+  }
+  .modal-body table th, .modal-body table td {
+    padding: 5px 8px; border: 1px solid var(--border); text-align: left;
+  }
+  .modal-body table th { background: var(--bg); }
+  .modal-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 8px; justify-content: space-between; align-items: center;
+  }
+  .modal-footer .skip-check { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .modal-footer .btn-group { display: flex; gap: 8px; }
+  .modal-footer button {
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 12px;
+  }
+  .modal-footer button.primary {
+    background: var(--accent); color: white; border-color: var(--accent);
+  }
+
+  @media print {
+    body { background: white; }
+    header.app .toggle-group, header.app .action-btn,
+    aside.params, aside.presets, footer.app, .modal-overlay { display: none !important; }
+    .layout { grid-template-columns: 1fr; padding: 0; min-height: auto; }
+    section.results { border: none; padding: 0; }
+    .kpi, .chart-card { break-inside: avoid; page-break-inside: avoid; }
+    .chart-canvas-wrap { height: 180px; }
+  }
+</style>
+</head>
+<body>
+
+<div x-data="simulator()" x-init="init()" x-cloak>
+
+  <!-- ============ Header / 헤더 ============ -->
+  <header class="app">
+    <h1>
+      <span x-text="t('title')"></span>
+      <span class="sub" x-text="t('subtitle')"></span>
+    </h1>
+    <span class="badge">v2.0 · Model v1.3</span>
+
+    <div class="spacer"></div>
+
+    <!-- Language toggle / 언어 토글 -->
+    <div class="toggle-group">
+      <button :class="{on: p.lang==='ko'}" @click="setLang('ko')">한국어</button>
+      <button :class="{on: p.lang==='en'}" @click="setLang('en')">English</button>
+    </div>
+
+    <!-- Currency toggle / 통화 -->
+    <div class="toggle-group">
+      <button :class="{on: p.ccy==='USD'}" @click="p.ccy='USD'; recompute()">USD $</button>
+      <button :class="{on: p.ccy==='MNT'}" @click="p.ccy='MNT'; recompute()">MNT ₮</button>
+      <button :class="{on: p.ccy==='KRW'}" @click="p.ccy='KRW'; recompute()">KRW ₩</button>
+    </div>
+
+    <button class="action-btn" @click="openTutorial()" x-text="'📖 ' + t('tutorial')"></button>
+    <button class="action-btn"
+            :style="testMode ? 'background:var(--warn)' : 'background:var(--muted)'"
+            @click="toggleTestMode()"
+            x-text="(testMode ? '✓ ' : '🔬 ') + t('verifyBtn')"
+            :title="t('verifyBtnTip')"></button>
+    <button class="action-btn" @click="window.print()" x-text="'📄 ' + t('print')"></button>
+    <button class="action-btn secondary" @click="resetAll()" x-text="'↺ ' + t('reset')"></button>
+  </header>
+
+  <!-- Verification banner / 검증 배너 -->
+  <template x-if="testMode">
+    <div class="verify-banner" x-text="t('verifyBanner')"></div>
+  </template>
+
+  <div class="layout">
+
+    <!-- ============ Left: Parameters / 좌: 파라미터 ============ -->
+    <aside class="params">
+
+      <div class="group-title">
+        <span x-text="t('mode')"></span>
+        <span style="font-size: 9px; font-weight: normal;" x-text="modeBadge()"></span>
+      </div>
+      <div style="display:flex; gap:4px; margin-bottom:8px;">
+        <button @click="setMode('poc')" :style="modeBtnStyle('poc')">
+          <span x-text="t('poc')"></span><br><small>1.5 MWh</small>
+        </button>
+        <button @click="setMode('scale')" :style="modeBtnStyle('scale')">
+          <span x-text="t('scale')"></span><br><small>50~500 MWh</small>
+        </button>
+      </div>
+
+      <div class="group-title"><span x-text="t('tier1')"></span></div>
+      <template x-for="key in tier1Keys" :key="key">
+        <div class="slider-row" x-show="key !== 'target_cap' || p.mode === 'scale'">
+          <label>
+            <span x-text="paramLabel(key)"></span>
+            <span class="unit" x-text="param(key).unit ? '('+param(key).unit+')' : ''"></span>
+          </label>
+          <input type="range"
+                 :min="param(key).min" :max="param(key).max" :step="param(key).step"
+                 x-model.number="p[key]" @input="recompute()">
+          <input type="number"
+                 :min="param(key).min" :max="param(key).max" :step="param(key).step"
+                 x-model.number="p[key]" @change="recompute()">
+        </div>
+      </template>
+
+      <div class="toggle-row">
+        <span x-text="t('carbonInclude')"></span>
+        <input type="checkbox" x-model="p.carbon_on" @change="recompute()">
+      </div>
+
+      <details>
+        <summary class="group-title" style="margin-top:12px;"><span x-text="t('tier2')"></span></summary>
+        <template x-for="key in tier2Keys" :key="key">
+          <div class="slider-row">
+            <label>
+              <span x-text="paramLabel(key)"></span>
+              <span class="unit" x-text="param(key).unit ? '('+param(key).unit+')' : ''"></span>
+            </label>
+            <input type="range"
+                   :min="param(key).min" :max="param(key).max" :step="param(key).step"
+                   x-model.number="p[key]" @input="recompute()">
+            <input type="number"
+                   :min="param(key).min" :max="param(key).max" :step="param(key).step"
+                   x-model.number="p[key]" @change="recompute()">
+          </div>
+        </template>
+      </details>
+
+      <details>
+        <summary class="group-title" style="margin-top:12px;"><span x-text="t('tier3')"></span></summary>
+        <template x-for="key in tier3Keys" :key="key">
+          <div class="slider-row">
+            <label>
+              <span x-text="paramLabel(key)"></span>
+              <span class="unit" x-text="param(key).unit ? '('+param(key).unit+')' : ''"></span>
+              <span class="cell-ref" x-text="param(key).cell || ''"></span>
+            </label>
+            <input type="range"
+                   :min="param(key).min" :max="param(key).max" :step="param(key).step"
+                   x-model.number="p[key]" @input="recompute()">
+            <input type="number"
+                   :min="param(key).min" :max="param(key).max" :step="param(key).step"
+                   x-model.number="p[key]" @change="recompute()">
+          </div>
+        </template>
+      </details>
+    </aside>
+
+    <!-- ============ Center: Results / 중: 결과 ============ -->
+    <section class="results">
+
+      <!-- Meta bar / 메타 바 -->
+      <div class="meta-bar">
+        <span><strong x-text="modeLabel()"></strong></span>
+        <span x-text="t('capacity') + ':'"></span><strong x-text="formatMWh(currentCapacity())"></strong>
+        <span x-text="t('heatingDays') + ':'"></span><strong x-text="p.heating_days + (p.lang==='ko'?'일':' days')"></strong>
+        <span x-text="t('lifetimeMeta') + ':'"></span><strong x-text="p.lifetime + (p.lang==='ko'?'년':' yr')"></strong>
+        <span x-text="t('discount') + ':'"></span><strong x-text="(p.discount*100).toFixed(1) + '%'"></strong>
+        <span x-text="t('carbon') + ':'"></span><strong x-text="p.carbon_on ? '$'+p.carbon_price+'/tCO₂' : t('carbonOff')"></strong>
+      </div>
+
+      <!-- KPI cards / KPI 카드 -->
+      <div class="kpi-grid">
+        <div class="kpi">
+          <div class="kpi-label" x-text="t('kpiCapex')"></div>
+          <div class="kpi-value" x-text="fmt(r.capex.isotes)"></div>
+          <div class="kpi-sub" x-text="t('coalDiff') + ' +' + fmt(r.capex.isotes - r.capex.coal)"></div>
+        </div>
+        <div class="kpi" :class="r.npv.isotes >= 0 ? 'good' : 'bad'">
+          <div class="kpi-label" x-text="t('kpiNpv')"></div>
+          <div class="kpi-value" x-text="fmtSigned(r.npv.isotes)"></div>
+          <div class="kpi-sub" x-text="t('discountRef') + ' ' + (p.discount*100).toFixed(1) + '%'"></div>
+        </div>
+        <div class="kpi">
+          <div class="kpi-label" x-text="t('kpiLcoh')"></div>
+          <div class="kpi-value" x-text="fmtPerMWh(r.lcoh.isotes)"></div>
+          <div class="kpi-sub" x-text="t('coalLcohRef') + ' ' + fmtPerMWh(r.lcoh.coal)"></div>
+        </div>
+        <div class="kpi" :class="r.payback.isotes < p.lifetime ? 'good' : 'bad'">
+          <div class="kpi-label" x-text="t('kpiPayback')"></div>
+          <div class="kpi-value" x-text="fmtPayback(r.payback.isotes)"></div>
+          <div class="kpi-sub" x-text="t('lifetimeRef') + ' ' + p.lifetime + (p.lang==='ko'?'년':' yr')"></div>
+        </div>
+      </div>
+
+      <!-- 4-tech comparison table / 4기술 비교 표 -->
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th x-text="t('metric')"></th>
+            <th class="coal" x-text="t('coal')"></th>
+            <th class="isotes" x-text="t('isotesGrid')"></th>
+            <th class="pv" x-text="t('pvIsotes')"></th>
+            <th class="etc" x-text="t('etcIsotes')"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td x-text="t('rowCapex')"></td>
+            <td x-text="fmt(r.capex.coal)"></td>
+            <td x-text="fmt(r.capex.isotes)"></td>
+            <td x-text="fmt(r.capex.pv)"></td>
+            <td x-text="fmt(r.capex.etc)"></td></tr>
+          <tr><td x-text="t('rowGross')"></td>
+            <td x-text="fmt(r.gross.coal)"></td>
+            <td x-text="fmt(r.gross.isotes)"></td>
+            <td x-text="fmt(r.gross.pv)"></td>
+            <td x-text="fmt(r.gross.etc)"></td></tr>
+          <tr><td x-text="t('rowCredit')"></td>
+            <td>—</td>
+            <td x-text="fmt(r.credit.isotes)" :class="r.credit.isotes>0?'pos':''"></td>
+            <td x-text="fmt(r.credit.pv)" :class="r.credit.pv>0?'pos':''"></td>
+            <td x-text="fmt(r.credit.etc)" :class="r.credit.etc>0?'pos':''"></td></tr>
+          <tr><td><strong x-text="t('rowNet')"></strong></td>
+            <td x-text="fmt(r.net.coal)"></td>
+            <td x-text="fmt(r.net.isotes)"></td>
+            <td x-text="fmt(r.net.pv)"></td>
+            <td x-text="fmt(r.net.etc)"></td></tr>
+          <tr><td x-text="t('rowLcoh')"></td>
+            <td x-text="fmtPerMWh(r.lcoh.coal)"></td>
+            <td x-text="fmtPerMWh(r.lcoh.isotes)"></td>
+            <td x-text="fmtPerMWh(r.lcoh.pv)"></td>
+            <td x-text="fmtPerMWh(r.lcoh.etc)"></td></tr>
+          <tr><td x-text="t('rowPayback')"></td>
+            <td>—</td>
+            <td x-text="fmtPayback(r.payback.isotes)"></td>
+            <td x-text="fmtPayback(r.payback.pv)"></td>
+            <td x-text="fmtPayback(r.payback.etc)"></td></tr>
+          <tr><td><strong x-text="t('rowNpv')"></strong></td>
+            <td>—</td>
+            <td x-text="fmtSigned(r.npv.isotes)" :class="r.npv.isotes>0?'pos':'neg'"></td>
+            <td x-text="fmtSigned(r.npv.pv)" :class="r.npv.pv>0?'pos':'neg'"></td>
+            <td x-text="fmtSigned(r.npv.etc)" :class="r.npv.etc>0?'pos':'neg'"></td></tr>
+          <tr><td x-text="t('rowCo2')"></td>
+            <td>—</td>
+            <td x-text="r.co2.isotes.toFixed(1)"></td>
+            <td x-text="r.co2.pv.toFixed(1)"></td>
+            <td x-text="r.co2.etc.toFixed(1)"></td></tr>
+        </tbody>
+      </table>
+
+      <!-- Charts / 차트 -->
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3 x-text="t('chartLcoh')"></h3>
+          <div class="chart-canvas-wrap"><canvas id="lcohChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3 x-text="t('chartNpv')"></h3>
+          <div class="chart-canvas-wrap"><canvas id="npvChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3 x-text="t('chartCost')"></h3>
+          <div class="chart-canvas-wrap"><canvas id="costChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3 x-text="t('chartCo2')"></h3>
+          <div class="chart-canvas-wrap"><canvas id="co2Chart"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Verification results / 검증 결과 -->
+      <template x-if="testMode">
+        <div>
+          <h3 style="margin-top: 20px;" x-text="t('verifyTitle')"></h3>
+          <table class="verify-table">
+            <thead><tr>
+              <th x-text="t('verifyScenario')"></th>
+              <th x-text="t('verifyMetric')"></th>
+              <th x-text="t('verifyExpected')"></th>
+              <th x-text="t('verifyActual')"></th>
+              <th x-text="t('verifyError')"></th>
+              <th x-text="t('verifyVerdict')"></th>
+            </tr></thead>
+            <tbody>
+              <template x-for="row in testResults" :key="row.id">
+                <tr :class="row.pass ? 'pass' : 'fail'">
+                  <td x-text="row.scenario"></td>
+                  <td x-text="row.metric"></td>
+                  <td x-text="row.expected.toFixed(2)"></td>
+                  <td x-text="row.actual.toFixed(2)"></td>
+                  <td x-text="row.error.toFixed(2)+'%'"></td>
+                  <td x-text="row.pass ? '✓ PASS' : '✗ FAIL'"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </template>
+    </section>
+
+    <!-- ============ Right: Presets / 우: 프리셋 ============ -->
+    <aside class="presets">
+      <div class="group-title"><span x-text="t('presets')"></span></div>
+      <template x-for="(preset, idx) in presets" :key="idx">
+        <button class="preset-item"
+                :class="{active: activePreset === idx}"
+                @click="applyPreset(idx)">
+          <span class="preset-name" x-text="preset.icon + ' ' + presetName(preset)"></span>
+          <span class="preset-desc" x-text="presetDesc(preset)"></span>
+        </button>
+      </template>
+    </aside>
+  </div>
+
+  <footer class="app">
+    <span><span x-text="t('footerSsot')"></span> <code>heating_business_model_v1.xlsx v1.3</code> <span x-text="t('footerSsotSuffix')"></span></span>
+    <span><span x-text="t('footerVerify')"></span> <a :href="testMode ? '?' : '?test=1'" x-text="testMode ? t('normalModeLink') : t('verifyModeLink')"></a></span>
+    <span><span x-text="t('footerBuild')"></span> 2026-05-11</span>
+  </footer>
+
+  <!-- Tutorial modal / 튜토리얼 모달 -->
+  <template x-if="tutorialOpen">
+    <div class="modal-overlay" @click.self="closeTutorial()">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 x-text="'📖 ' + t('tutTitle')"></h2>
+          <button class="modal-close" @click="closeTutorial()">✕</button>
+        </div>
+        <div class="modal-tabs">
+          <template x-for="(tab, idx) in tutorialTabs" :key="idx">
+            <button :class="{active: tutorialTab === idx}"
+                    @click="tutorialTab = idx"
+                    x-text="t(tab.key)"></button>
+          </template>
+        </div>
+        <div class="modal-body" x-html="tutorialContent()"></div>
+        <div class="modal-footer">
+          <label class="skip-check">
+            <input type="checkbox" x-model="tutorialSkip">
+            <span x-text="t('tutDontShow')"></span>
+          </label>
+          <div class="btn-group">
+            <button @click="tutorialTab = Math.max(0, tutorialTab - 1)"
+                    :disabled="tutorialTab === 0"
+                    x-text="t('tutPrev')"></button>
+            <template x-if="tutorialTab < tutorialTabs.length - 1">
+              <button class="primary"
+                      @click="tutorialTab = tutorialTab + 1"
+                      x-text="t('tutNext')"></button>
+            </template>
+            <template x-if="tutorialTab === tutorialTabs.length - 1">
+              <button class="primary"
+                      @click="closeTutorial()"
+                      x-text="t('tutDone')"></button>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+</div>
+
+<script>
+// ============================================================
+// Translation dictionary / 번역 사전
+// ============================================================
+const TRANSLATIONS = {
+  ko: {
+    title: 'GIGAette 몽골 난방 사업성 시뮬레이터',
+    subtitle: 'Mongolia Heating Business Viability Simulator',
+    reset: '초기화',
+    print: 'PDF/인쇄',
+    mode: '운영 모드',
+    poc: 'PoC',
+    scale: '스케일업',
+    tier1: '기본 (Tier 1)',
+    tier2: '고급 (Tier 2)',
+    tier3: 'CAPEX 세부 (Tier 3)',
+    carbonInclude: '탄소배출권 수익 포함',
+    presets: '시나리오 프리셋',
+    pocLabel: 'PoC 모드 — 1.5 MWh 단일 시설',
+    scaleLabel: '스케일업 모드 — 다중·대형 시설',
+    pocBadge: '03_PoC_Result 기반',
+    scaleBadge: '04_Scaleup_Result 기반',
+    capacity: '용량',
+    heatingDays: '난방기간',
+    lifetimeMeta: '수명',
+    discount: '할인율',
+    carbon: '탄소',
+    carbonOff: '미반영',
+    metric: '지표',
+    coal: '갈탄 보일러',
+    isotesGrid: 'IsoTES + 그리드',
+    pvIsotes: '태양광 PV + IsoTES',
+    etcIsotes: '태양열 ETC + IsoTES',
+    rowCapex: 'CAPEX (초기 투자)',
+    rowGross: '연 운영비 (gross)',
+    rowCredit: '탄소배출권 수익',
+    rowNet: '연 순비용',
+    rowLcoh: 'LCOH (15년)',
+    rowPayback: '회수기간 vs 갈탄',
+    rowNpv: 'NPV vs 갈탄 (15년)',
+    rowCo2: 'CO₂ 절감 (tCO₂/yr)',
+    kpiCapex: 'IsoTES CAPEX',
+    kpiNpv: 'IsoTES NPV (15년)',
+    kpiLcoh: 'IsoTES LCOH',
+    kpiPayback: 'IsoTES 회수기간',
+    coalDiff: '갈탄 대비',
+    coalLcohRef: '갈탄 LCOH',
+    lifetimeRef: '시스템 수명',
+    discountRef: '할인율',
+    chartLcoh: 'LCOH 비교 (낮을수록 경제적)',
+    chartNpv: 'NPV vs 갈탄 (15년 누적, 양수=갈탄보다 경제적)',
+    chartCost: '연 순비용 비교',
+    chartCo2: 'CO₂ 절감 분포 (vs 갈탄, tCO₂/yr)',
+    verifyBanner: '검증 모드 — Excel SSoT 기준값과 JS 계산값을 비교합니다',
+    verifyTitle: '검증 결과 — Excel 기준값과 JS 계산 비교',
+    verifyScenario: '시나리오',
+    verifyMetric: '지표',
+    verifyExpected: 'Excel (기댓)',
+    verifyActual: 'JS (실측)',
+    verifyError: '오차',
+    verifyVerdict: '판정',
+    verifyModeLink: '검증 모드 보기',
+    normalModeLink: '일반 모드로',
+    footerSsot: 'Excel SSoT:',
+    footerSsotSuffix: '(127개 수식)',
+    footerVerify: '계산 검증:',
+    footerBuild: '빌드:',
+    years: '년',
+    over50: '>50년',
+    tutorial: '튜토리얼',
+    tutClose: '닫기',
+    tutNext: '다음 ▸',
+    tutPrev: '◂ 이전',
+    tutDone: '시작하기',
+    tutDontShow: '다시 보지 않기',
+    tutTitle: '사용 가이드',
+    tabQuick: '빠른 시작',
+    tabMode: '모드 선택',
+    tabSlider: '슬라이더 조작',
+    tabResults: '결과 해석',
+    tabPresets: '프리셋 활용',
+    tabIO: '언어·통화·PDF',
+    tabFaq: 'Q&A',
+    verifyBtn: '검증',
+    verifyBtnTip: 'JS 계산 결과를 Excel 기준값과 비교 (5% 허용 오차)',
+  },
+  en: {
+    title: 'GIGAette Mongolia Heating Business Viability Simulator',
+    subtitle: '몽골 난방 사업성 시뮬레이터',
+    reset: 'Reset',
+    print: 'PDF/Print',
+    mode: 'Operating Mode',
+    poc: 'PoC',
+    scale: 'Scale-up',
+    tier1: 'Basic (Tier 1)',
+    tier2: 'Advanced (Tier 2)',
+    tier3: 'CAPEX Details (Tier 3)',
+    carbonInclude: 'Include carbon credit revenue',
+    presets: 'Scenario Presets',
+    pocLabel: 'PoC Mode — 1.5 MWh single facility',
+    scaleLabel: 'Scale-up Mode — multiple / large facility',
+    pocBadge: 'Based on 03_PoC_Result',
+    scaleBadge: 'Based on 04_Scaleup_Result',
+    capacity: 'Capacity',
+    heatingDays: 'Heating period',
+    lifetimeMeta: 'Lifetime',
+    discount: 'Discount rate',
+    carbon: 'Carbon',
+    carbonOff: 'Off',
+    metric: 'Metric',
+    coal: 'Coal boiler',
+    isotesGrid: 'IsoTES + Grid',
+    pvIsotes: 'Solar PV + IsoTES',
+    etcIsotes: 'Solar ETC + IsoTES',
+    rowCapex: 'CAPEX (initial investment)',
+    rowGross: 'Annual opex (gross)',
+    rowCredit: 'Carbon credit revenue',
+    rowNet: 'Annual net cost',
+    rowLcoh: 'LCOH (15yr)',
+    rowPayback: 'Payback vs coal',
+    rowNpv: 'NPV vs coal (15yr)',
+    rowCo2: 'CO₂ savings (tCO₂/yr)',
+    kpiCapex: 'IsoTES CAPEX',
+    kpiNpv: 'IsoTES NPV (15yr)',
+    kpiLcoh: 'IsoTES LCOH',
+    kpiPayback: 'IsoTES Payback',
+    coalDiff: 'vs coal',
+    coalLcohRef: 'Coal LCOH',
+    lifetimeRef: 'System lifetime',
+    discountRef: 'discount',
+    chartLcoh: 'LCOH Comparison (lower = more economic)',
+    chartNpv: 'NPV vs Coal (15yr cumulative, positive = beats coal)',
+    chartCost: 'Annual Net Cost Comparison',
+    chartCo2: 'CO₂ Savings Distribution (vs Coal, tCO₂/yr)',
+    verifyBanner: 'Verification Mode — comparing JS calculations against Excel SSoT',
+    verifyTitle: 'Verification Results — Excel reference vs JS computation',
+    verifyScenario: 'Scenario',
+    verifyMetric: 'Metric',
+    verifyExpected: 'Excel (expected)',
+    verifyActual: 'JS (actual)',
+    verifyError: 'Error',
+    verifyVerdict: 'Verdict',
+    verifyModeLink: 'View verification',
+    normalModeLink: 'Back to normal',
+    footerSsot: 'Excel SSoT:',
+    footerSsotSuffix: '(127 formulas)',
+    footerVerify: 'Calculation verification:',
+    footerBuild: 'Build:',
+    years: 'yr',
+    over50: '>50 yr',
+    tutorial: 'Tutorial',
+    tutClose: 'Close',
+    tutNext: 'Next ▸',
+    tutPrev: '◂ Prev',
+    tutDone: 'Get started',
+    tutDontShow: "Don't show again",
+    tutTitle: 'User Guide',
+    tabQuick: 'Quick Start',
+    tabMode: 'Mode Selection',
+    tabSlider: 'Slider Operation',
+    tabResults: 'Reading Results',
+    tabPresets: 'Using Presets',
+    tabIO: 'Language·Currency·PDF',
+    tabFaq: 'FAQ',
+    verifyBtn: 'Verify',
+    verifyBtnTip: 'Compare JS results vs Excel reference (5% tolerance)',
+  }
+};
+
+// ============================================================
+// Core computation / 핵심 계산
+// ============================================================
+function compute(p) {
+  const fx = p.ccy === 'USD' ? 1 : p.ccy === 'MNT' ? p.fx_usd_mnt : p.fx_usd_krw;
+  const scale = p.mode === 'scale' ? (p.target_cap / 1.5) : 1.0;
+
+  const annualMJ   = p.daily_mj * p.heating_days * scale;
+  const annualMWh  = annualMJ / 3600;
+  const elecKwhYr  = (p.daily_mj / 3.6) / p.elec_eff * p.heating_days * scale;
+  const coalTonYr  = annualMJ / p.coal_eff / p.coal_hhv / 1000;
+
+  const coalLow_mnt  = p.coal_low_mnt  * p.coal_price_mult;
+  const coalHigh_mnt = p.coal_high_mnt * p.coal_price_mult;
+  const coalFuelUsd  = coalTonYr * (coalLow_mnt + coalHigh_mnt) / 2 / p.fx_usd_mnt;
+  const transportUsd = p.transport_usd * p.trips_yr * scale;
+  const coalMaintUsd = p.coal_only * 0.04 * scale;
+  const coalAnnUsd   = coalFuelUsd + transportUsd + coalMaintUsd;
+
+  const capexCoalUsd = (p.common_infra + p.coal_only) * Math.pow(scale, p.scale_exp);
+  const capexIsotesBaseUsd = (p.capex_system_krw + p.capex_logistics_krw + p.capex_install_krw) / p.fx_usd_krw;
+  const capexIsotesUsd = capexIsotesBaseUsd * Math.pow(scale, p.scale_exp);
+
+  const pvKwp = (p.daily_mj / 3.6) / p.elec_eff / p.solar_irrad * scale;
+  const capexPvAddUsd = pvKwp * 1000 * (p.pv_module + p.pv_inverter + p.pv_install);
+  const capexPvUsd = capexIsotesUsd + capexPvAddUsd;
+
+  const etcM2 = (p.daily_mj / 3.6) / p.elec_eff / p.solar_irrad / p.etc_eff * scale;
+  const capexEtcAddUsd = etcM2 * (p.etc_tube + p.etc_mount + p.etc_circuit);
+  const capexEtcUsd = capexIsotesUsd + capexEtcAddUsd;
+
+  const elecRateDisc = p.night_rate_mnt * (1 - p.night_disc) / p.fx_usd_mnt;
+  const elecRateFull = p.night_rate_mnt / p.fx_usd_mnt;
+  const isotesAnnUsd = elecKwhYr * elecRateDisc + capexIsotesUsd * p.opex_pct;
+  const pvAnnUsd  = elecKwhYr * (1 - p.pv_cover)  * elecRateFull + capexPvUsd  * p.opex_pct;
+  const etcAnnUsd = elecKwhYr * (1 - p.etc_cover) * elecRateFull + capexEtcUsd * p.opex_pct;
+
+  const coalCo2 = coalTonYr * 2.36;
+  const gridCo2 = elecKwhYr * p.grid_co2 / 1000;
+  const co2Isotes = coalCo2 - gridCo2;
+  const co2Pv     = coalCo2 - (1 - p.pv_cover)  * gridCo2;
+  const co2Etc    = coalCo2 - (1 - p.etc_cover) * gridCo2;
+
+  const carbonMult = p.carbon_on ? p.carbon_price : 0;
+  const creditIsotes = co2Isotes * carbonMult;
+  const creditPv     = co2Pv     * carbonMult;
+  const creditEtc    = co2Etc    * carbonMult;
+
+  const netCoal   = coalAnnUsd;
+  const netIsotes = isotesAnnUsd - creditIsotes;
+  const netPv     = pvAnnUsd     - creditPv;
+  const netEtc    = etcAnnUsd    - creditEtc;
+
+  const r = p.discount, n = p.lifetime;
+  const PVF = (1 - Math.pow(1 + r, -n)) / r;
+
+  const lcoh = (cap, ann) => safeFinite((cap + PVF * ann) / (PVF * annualMWh) * fx);
+  const payback = (capDiff, save) => save > 0 ? capDiff / save : Infinity;
+  const npv = (capDiff, save) => save * PVF - capDiff;
+
+  return {
+    annualMWh, coalTonYr, elecKwhYr, pvKwp, etcM2,
+    capex: { coal: capexCoalUsd*fx, isotes: capexIsotesUsd*fx, pv: capexPvUsd*fx, etc: capexEtcUsd*fx },
+    gross: { coal: coalAnnUsd*fx, isotes: isotesAnnUsd*fx, pv: pvAnnUsd*fx, etc: etcAnnUsd*fx },
+    credit: { coal: 0, isotes: creditIsotes*fx, pv: creditPv*fx, etc: creditEtc*fx },
+    net:   { coal: netCoal*fx, isotes: netIsotes*fx, pv: netPv*fx, etc: netEtc*fx },
+    lcoh:  { coal: lcoh(capexCoalUsd, netCoal), isotes: lcoh(capexIsotesUsd, netIsotes),
+             pv: lcoh(capexPvUsd, netPv), etc: lcoh(capexEtcUsd, netEtc) },
+    payback: { isotes: payback(capexIsotesUsd - capexCoalUsd, netCoal - netIsotes),
+               pv:     payback(capexPvUsd     - capexCoalUsd, netCoal - netPv),
+               etc:    payback(capexEtcUsd    - capexCoalUsd, netCoal - netEtc) },
+    npv: { isotes: npv(capexIsotesUsd - capexCoalUsd, netCoal - netIsotes) * fx,
+           pv:     npv(capexPvUsd     - capexCoalUsd, netCoal - netPv)     * fx,
+           etc:    npv(capexEtcUsd    - capexCoalUsd, netCoal - netEtc)    * fx },
+    co2: { coal: coalCo2, isotes: co2Isotes, pv: co2Pv, etc: co2Etc },
+  };
+}
+function safeFinite(v) { return Number.isFinite(v) ? v : 0; }
+
+// ============================================================
+// Parameter definitions / 파라미터 정의 (with bilingual labels)
+// ============================================================
+const PARAM_DEFS = {
+  // Tier 1
+  night_disc:      { label_ko: '심야 할인율', label_en: 'Night discount rate',
+                     unit: '%', min: 0, max: 0.7, step: 0.05, default: 0.50, cell: 'B25', tier: 1 },
+  carbon_price:    { label_ko: '탄소 가격', label_en: 'Carbon price',
+                     unit: 'USD/tCO₂', min: 0, max: 200, step: 5, default: 50, cell: 'B39', tier: 1 },
+  discount:        { label_ko: '할인율', label_en: 'Discount rate',
+                     unit: '%', min: 0.03, max: 0.15, step: 0.005, default: 0.06, cell: 'B37', tier: 1 },
+  target_cap:      { label_ko: '목표 용량', label_en: 'Target capacity',
+                     unit: 'MWh', min: 1.5, max: 500, step: 0.5, default: 100, cell: 'B44', tier: 1 },
+  scale_exp:       { label_ko: '스케일링 지수 b', label_en: 'Scaling exponent b',
+                     unit: '', min: 0.5, max: 1.0, step: 0.05, default: 0.7, cell: 'B45', tier: 1 },
+  coal_price_mult: { label_ko: '갈탄 가격 배율', label_en: 'Coal price multiplier',
+                     unit: '×', min: 0.5, max: 2.0, step: 0.1, default: 1.0, cell: 'B19·B20', tier: 1 },
+
+  // Tier 2
+  daily_mj:        { label_ko: '일일 열공급', label_en: 'Daily heat demand',
+                     unit: 'MJ/day', min: 1000, max: 10000, step: 100, default: 3600, cell: 'B12', tier: 2 },
+  heating_days:    { label_ko: '난방 기간', label_en: 'Heating period',
+                     unit: 'days', min: 180, max: 270, step: 1, default: 243, cell: 'B13', tier: 2 },
+  coal_eff:        { label_ko: '갈탄 보일러 효율', label_en: 'Coal boiler efficiency',
+                     unit: '%', min: 0.20, max: 0.60, step: 0.05, default: 0.30, cell: 'B14', tier: 2 },
+  elec_eff:        { label_ko: 'IsoTES 시스템 효율', label_en: 'IsoTES system efficiency',
+                     unit: '%', min: 0.85, max: 0.99, step: 0.01, default: 0.95, cell: 'B15', tier: 2 },
+  coal_hhv:        { label_ko: '갈탄 발열량', label_en: 'Coal heating value',
+                     unit: 'MJ/kg', min: 10, max: 25, step: 0.5, default: 15, cell: 'B16', tier: 2 },
+  trips_yr:        { label_ko: '연간 운송 횟수', label_en: 'Annual transport trips',
+                     unit: '회 / trips', min: 5, max: 50, step: 1, default: 20, cell: 'B23', tier: 2 },
+  transport_usd:   { label_ko: '운송 단가', label_en: 'Transport unit cost',
+                     unit: 'USD/trip', min: 100, max: 800, step: 20, default: 360, cell: 'B22', tier: 2 },
+  lifetime:        { label_ko: '시스템 수명', label_en: 'System lifetime',
+                     unit: 'yr', min: 10, max: 25, step: 1, default: 15, cell: 'B36', tier: 2 },
+  opex_pct:        { label_ko: '연 유지보수', label_en: 'Annual O&M',
+                     unit: '% of CAPEX', min: 0.005, max: 0.05, step: 0.005, default: 0.02, cell: 'B38', tier: 2 },
+  solar_irrad:     { label_ko: '일조량', label_en: 'Solar irradiation',
+                     unit: 'kWh/m²/day', min: 3.0, max: 5.5, step: 0.1, default: 4.0, cell: 'B53', tier: 2 },
+  pv_cover:        { label_ko: 'PV 커버율', label_en: 'PV coverage',
+                     unit: '%', min: 0.30, max: 1.0, step: 0.05, default: 0.70, cell: 'B55', tier: 2 },
+  etc_cover:       { label_ko: 'ETC 커버율', label_en: 'ETC coverage',
+                     unit: '%', min: 0.50, max: 1.0, step: 0.05, default: 1.0, cell: 'B59', tier: 2 },
+  etc_eff:         { label_ko: 'ETC 집열 효율', label_en: 'ETC collector efficiency',
+                     unit: '%', min: 0.35, max: 0.60, step: 0.05, default: 0.45, cell: 'B57', tier: 2 },
+  grid_co2:        { label_ko: '그리드 CO₂ 계수', label_en: 'Grid CO₂ factor',
+                     unit: 'tCO₂/MWh', min: 0.30, max: 1.0, step: 0.05, default: 0.70, cell: 'B58', tier: 2 },
+  night_rate_mnt:  { label_ko: '심야 전력 정상가', label_en: 'Night electricity base rate',
+                     unit: 'MNT/kWh', min: 100, max: 300, step: 5, default: 175, cell: 'B24', tier: 2 },
+  coal_low_mnt:    { label_ko: '갈탄 단가 (저)', label_en: 'Coal price (low)',
+                     unit: 'MNT/ton', min: 80000, max: 250000, step: 5000, default: 136800, cell: 'B19', tier: 2 },
+  coal_high_mnt:   { label_ko: '갈탄 단가 (고)', label_en: 'Coal price (high)',
+                     unit: 'MNT/ton', min: 100000, max: 300000, step: 5000, default: 171000, cell: 'B20', tier: 2 },
+
+  // Tier 3
+  common_infra:    { label_ko: '공통 인프라', label_en: 'Common infrastructure',
+                     unit: 'USD', min: 0, max: 50000, step: 1000, default: 20000, cell: 'B68', tier: 3 },
+  coal_only:       { label_ko: '갈탄 전용 CAPEX', label_en: 'Coal-specific CAPEX',
+                     unit: 'USD', min: 10000, max: 80000, step: 1000, default: 30000, cell: 'B69', tier: 3 },
+  capex_system_krw:    { label_ko: '시스템 위탁제작', label_en: 'System subcontract (production)',
+                         unit: 'KRW', min: 50_000_000, max: 200_000_000, step: 1_000_000, default: 90_000_000, cell: 'B29', tier: 3 },
+  capex_logistics_krw: { label_ko: '국제 운송·통관', label_en: 'International logistics & customs',
+                         unit: 'KRW', min: 5_000_000, max: 30_000_000, step: 500_000, default: 10_000_000, cell: 'B30', tier: 3 },
+  capex_install_krw:   { label_ko: '몽골 현지 설치·시운전', label_en: 'Mongolia install & commission',
+                         unit: 'KRW', min: 50_000_000, max: 250_000_000, step: 1_000_000, default: 141_000_000, cell: 'B31', tier: 3 },
+  pv_module:    { label_ko: 'PV 모듈', label_en: 'PV module',
+                  unit: 'USD/Wp', min: 0.20, max: 1.00, step: 0.05, default: 0.50, cell: 'B73', tier: 3 },
+  pv_inverter:  { label_ko: '인버터·BOS', label_en: 'Inverter & BOS',
+                  unit: 'USD/Wp', min: 0.10, max: 0.50, step: 0.05, default: 0.20, cell: 'B74', tier: 3 },
+  pv_install:   { label_ko: 'PV 설치', label_en: 'PV installation',
+                  unit: 'USD/Wp', min: 0.10, max: 0.50, step: 0.05, default: 0.20, cell: 'B75', tier: 3 },
+  etc_tube:     { label_ko: 'ETC 진공관', label_en: 'ETC evacuated tube',
+                  unit: 'USD/m²', min: 25, max: 100, step: 5, default: 50, cell: 'B79', tier: 3 },
+  etc_mount:    { label_ko: 'ETC 가대', label_en: 'ETC mounting',
+                  unit: 'USD/m²', min: 5, max: 30, step: 1, default: 15, cell: 'B80', tier: 3 },
+  etc_circuit:  { label_ko: 'ETC 순환계', label_en: 'ETC solar circuit',
+                  unit: 'USD/m²', min: 2, max: 15, step: 1, default: 5, cell: 'B81', tier: 3 },
+  fx_usd_mnt:   { label_ko: 'USD→MNT 환율', label_en: 'USD→MNT FX rate',
+                  unit: '', min: 2500, max: 5000, step: 50, default: 3420, cell: 'B6', tier: 3 },
+  fx_usd_krw:   { label_ko: 'USD→KRW 환율', label_en: 'USD→KRW FX rate',
+                  unit: '', min: 1000, max: 1800, step: 10, default: 1370, cell: 'B7', tier: 3 },
+};
+
+// ============================================================
+// Presets (bilingual)
+// ============================================================
+const PRESETS = [
+  { icon: '🏠',
+    name_ko: 'PoC 기본 (현행)', name_en: 'PoC Baseline (current)',
+    desc_ko: '심야할인 50%, 1.5MWh, 모든 기본값', desc_en: 'Night discount 50%, 1.5 MWh, all defaults',
+    changes: { mode: 'poc', night_disc: 0.50, carbon_on: false, target_cap: 1.5 } },
+  { icon: '⚡',
+    name_ko: '시나리오 1: 심야할인 폐지', name_en: 'S1: Night discount abolished',
+    desc_ko: '정책 리스크 검증', desc_en: 'Policy risk stress test',
+    changes: { mode: 'poc', night_disc: 0, carbon_on: false } },
+  { icon: '📈',
+    name_ko: '시나리오 2: 스케일 100 MWh', name_en: 'S2: Scale-up 100 MWh',
+    desc_ko: '1,000m³급, Lang b=0.7', desc_en: '1,000m³ class, Lang b=0.7',
+    changes: { mode: 'scale', target_cap: 100, scale_exp: 0.7, night_disc: 0.50, carbon_on: false } },
+  { icon: '🏭',
+    name_ko: '시나리오 2b: 스케일 500 MWh', name_en: 'S2b: Scale-up 500 MWh',
+    desc_ko: '5,000m³급 대규모', desc_en: '5,000m³ class, large-scale',
+    changes: { mode: 'scale', target_cap: 500, scale_exp: 0.7, night_disc: 0.50, carbon_on: false } },
+  { icon: '💰',
+    name_ko: '시나리오 3: 탄소 $50/t (SCC)', name_en: 'S3: Carbon $50/t (SCC)',
+    desc_ko: '사회비용 기준', desc_en: 'Social cost of carbon baseline',
+    changes: { mode: 'poc', carbon_on: true, carbon_price: 50 } },
+  { icon: '🌳',
+    name_ko: '시나리오 3b: 탄소 $15/t (VCM)', name_en: 'S3b: Carbon $15/t (VCM)',
+    desc_ko: '자발적 탄소시장 현재가', desc_en: 'Voluntary carbon market current',
+    changes: { mode: 'poc', carbon_on: true, carbon_price: 15 } },
+  { icon: '🏦',
+    name_ko: '시나리오 4: 민간 IR (IRR≥10%)', name_en: 'S4: Private IR (IRR ≥10%)',
+    desc_ko: '할인율 10% 적용', desc_en: '10% discount rate test',
+    changes: { mode: 'scale', target_cap: 100, discount: 0.10 } },
+  { icon: '🔥',
+    name_ko: '시나리오 5: 갈탄 +50% 인상', name_en: 'S5: Coal +50% price hike',
+    desc_ko: '연료 가격 상승 헤지', desc_en: 'Fuel price hedge scenario',
+    changes: { mode: 'poc', coal_price_mult: 1.5 } },
+  { icon: '☀️',
+    name_ko: '시나리오 6: PV 단가 하락', name_en: 'S6: PV cost drop (global)',
+    desc_ko: '글로벌 PV $0.30/Wp', desc_en: 'Global PV $0.30/Wp',
+    changes: { mode: 'poc', pv_module: 0.30, coal_price_mult: 1.5 } },
+  { icon: '🌅',
+    name_ko: '시나리오 7: ETC 낙관 (100% 자급)', name_en: 'S7: ETC optimistic (100%)',
+    desc_ko: '고효율 + 일조 최적', desc_en: 'High efficiency + optimal sun',
+    changes: { mode: 'poc', etc_cover: 1.0, etc_eff: 0.55, solar_irrad: 4.5 } },
+  { icon: '⛅',
+    name_ko: '시나리오 8b: ETC 보수 (70%)', name_en: 'S8b: ETC conservative (70%)',
+    desc_ko: 'PV와 동일 보수 가정', desc_en: 'Same as PV (conservative)',
+    changes: { mode: 'poc', etc_cover: 0.70 } },
+  { icon: '🔧',
+    name_ko: '시나리오 8c: 기존 보일러 교체', name_en: 'S8c: Boiler replacement',
+    desc_ko: '공통 인프라 = 0 (배관 재활용)', desc_en: 'Common infra = 0 (reuse pipes)',
+    changes: { mode: 'poc', common_infra: 0 } },
+  { icon: '🌍',
+    name_ko: '시나리오 9: 스케일 + 탄소 $15', name_en: 'S9: Scale-up + Carbon $15',
+    desc_ko: '100MWh + VCM', desc_en: '100MWh + VCM',
+    changes: { mode: 'scale', target_cap: 100, carbon_on: true, carbon_price: 15 } },
+  { icon: '🚀',
+    name_ko: '극값: 스케일500 + 탄소$150', name_en: 'Extreme: Scale500 + Carbon$150',
+    desc_ko: 'EU ETS + 대규모 + ETC 85%', desc_en: 'EU ETS + large + ETC 85%',
+    changes: { mode: 'scale', target_cap: 500, carbon_on: true, carbon_price: 150, etc_cover: 0.85 } },
+];
+
+// ============================================================
+// Tutorial content (bilingual, HTML strings)
+// ============================================================
+const TUTORIAL_KO = [
+  // 0. 빠른 시작
+  `<h3>30초 요약</h3>
+   <p>이 시뮬레이터는 몽골 체체를렉 IsoTES 사업의 경제성을 <strong>슬라이더로 즉시</strong> 시뮬레이션합니다. 갈탄 보일러 vs IsoTES vs 태양광 PV vs 태양열 ETC 4개 기술을 한눈에 비교합니다.</p>
+   <h3>3분 만에 사용해보기</h3>
+   <ol>
+     <li><strong>우측 패널의 프리셋</strong>을 클릭해 자주 쓰는 시나리오를 즉시 적용 (예: "🏠 PoC 기본", "📈 시나리오 2: 스케일 100 MWh")</li>
+     <li>중앙 결과 영역에서 <strong>KPI 카드 4개</strong>(IsoTES CAPEX·NPV·LCOH·회수기간)와 <strong>4기술 비교 표</strong>를 확인</li>
+     <li>좌측 슬라이더로 <strong>가정값을 미세 조정</strong>(심야할인·탄소가격·할인율 등)하면 결과가 실시간 갱신</li>
+   </ol>
+   <div class="tip">💡 <strong>IR/ODA 미팅 시연 팁</strong>: 프리셋을 순차 클릭하면서 "현재 상태 → 스케일 후 → 탄소배출권 반영"의 스토리를 1분 안에 보여줄 수 있습니다.</div>
+   <h3>주요 화면 구성</h3>
+   <table>
+     <tr><th>영역</th><th>역할</th></tr>
+     <tr><td>상단 헤더</td><td>언어 (한국어/English), 통화 (USD/MNT/KRW), PDF 출력, 초기화 버튼</td></tr>
+     <tr><td>좌측 패널</td><td>모드 선택 + 파라미터 슬라이더 (Tier 1/2/3)</td></tr>
+     <tr><td>중앙 영역</td><td>메타 정보 바 → KPI 카드 → 4기술 비교 표 → 4개 차트</td></tr>
+     <tr><td>우측 패널</td><td>14개 시나리오 프리셋 (가이드 §5와 1:1 매핑)</td></tr>
+   </table>`,
+
+  // 1. 모드 선택
+  `<h3>PoC vs 스케일업 모드</h3>
+   <p>좌측 패널 최상단에서 두 가지 운영 모드를 선택합니다.</p>
+   <table>
+     <tr><th>모드</th><th>대상</th><th>용량</th><th>참조 시트</th></tr>
+     <tr><td><strong>PoC</strong></td><td>현재 시범사업</td><td>1.5 MWh (고정)</td><td>03_PoC_Result</td></tr>
+     <tr><td><strong>스케일업</strong></td><td>상업화 후</td><td>1.5~500 MWh (슬라이더)</td><td>04_Scaleup_Result</td></tr>
+   </table>
+   <h3>모드 전환 시 작동 방식</h3>
+   <ul>
+     <li>PoC → 스케일업: 목표 용량 슬라이더가 100 MWh로 초기 설정</li>
+     <li>스케일업 → PoC: 용량이 자동으로 1.5 MWh로 복원</li>
+     <li><strong>CAPEX 스케일링</strong>: Lang factor (CAPEX = CAPEX_base × (Q/Q_base)<sup>b</sup>) 자동 적용 (기본 b=0.7)</li>
+     <li><strong>운영비·연료비</strong>: 용량에 정비례 스케일</li>
+   </ul>
+   <div class="tip">💡 <strong>모드 표시</strong>: 결과 영역 상단 파란색 메타 바에 "PoC 모드 — 1.5 MWh" 또는 "스케일업 모드 — 다중/대형 시설"이 항상 표시됩니다. 또 모드 라디오 우측에 "03_PoC_Result 기반" 같은 출처 시트가 작은 글씨로 보입니다.</div>
+   <div class="warn">⚠ <strong>주의</strong>: 스케일업 모드에서 NPV가 양수로 크게 나오더라도, 실제 100 MWh 사업 발주가 가능한지는 별도의 시장·정책 검토가 필요합니다. NPV는 경제성의 <strong>필요조건</strong>일 뿐 충분조건이 아닙니다.</div>`,
+
+  // 2. 슬라이더 조작
+  `<h3>3단계 슬라이더 분류</h3>
+   <table>
+     <tr><th>Tier</th><th>개수</th><th>용도</th><th>접근</th></tr>
+     <tr><td><strong>Tier 1 기본</strong></td><td>6개 + 탄소 토글</td><td>IR·미팅 빈출 변수</td><td>항상 표시</td></tr>
+     <tr><td><strong>Tier 2 고급</strong></td><td>17개</td><td>물리·재무 가정</td><td>"고급" 펼침 클릭</td></tr>
+     <tr><td><strong>Tier 3 CAPEX 세부</strong></td><td>13개</td><td>구성요소별 단가</td><td>"CAPEX 세부" 펼침</td></tr>
+   </table>
+   <h3>슬라이더 사용법</h3>
+   <ul>
+     <li><strong>슬라이더 드래그</strong>: 마우스로 끌면 즉시 결과 갱신 (50ms 디바운스)</li>
+     <li><strong>숫자 박스 직접 입력</strong>: 우측 숫자 칸에 값을 타이핑 후 <kbd>Enter</kbd> — 슬라이더 범위 밖 값도 입력 가능</li>
+     <li><strong>키보드</strong>: 슬라이더 클릭 후 <kbd>←</kbd> <kbd>→</kbd> 화살표로 미세 조정</li>
+     <li><strong>Excel 셀 위치</strong>: Tier 3 슬라이더 우측에 작은 회색 글씨로 Excel 셀 좌표(B68 등) 표시</li>
+   </ul>
+   <h3>핵심 Tier 1 슬라이더</h3>
+   <table>
+     <tr><th>슬라이더</th><th>의미</th><th>전형적 시나리오</th></tr>
+     <tr><td>심야 할인율</td><td>몽골 정부 전력 할인 정책</td><td>50%=현행 / 0%=폐지</td></tr>
+     <tr><td>탄소 가격</td><td>tCO₂ 당 USD</td><td>$15=VCM / $50=SCC / $150=EU ETS</td></tr>
+     <tr><td>할인율</td><td>NPV 계산 시 시간 가치</td><td>6%=ODA / 10%=민간 IR</td></tr>
+     <tr><td>목표 용량</td><td>스케일업 규모 (스케일 모드만)</td><td>100 MWh=1,000m³급</td></tr>
+     <tr><td>스케일링 지수 b</td><td>규모의 경제</td><td>0.7=일반 / 0.6=강한 경제 / 1.0=없음</td></tr>
+     <tr><td>갈탄 가격 배율</td><td>연료 가격 변동</td><td>1.0=현재 / 1.5=인상 / 0.7=하락</td></tr>
+   </table>
+   <div class="tip">💡 <strong>탄소배출권 토글</strong>: 슬라이더 그룹 아래 체크박스로 켜고 끌 수 있습니다. 끄면 탄소 가격은 무시됩니다.</div>`,
+
+  // 3. 결과 해석
+  `<h3>4가지 영역</h3>
+   <ol>
+     <li><strong>메타 정보 바</strong> (파란 띠): 현재 모드, 용량, 난방기간, 수명, 할인율, 탄소 설정 — 스크린샷·PDF에 컨텍스트 보존</li>
+     <li><strong>KPI 카드 4개</strong>: IsoTES 기준 CAPEX·NPV·LCOH·회수기간. NPV·회수기간 카드는 양수(녹색)/음수(빨강)로 자동 색분류</li>
+     <li><strong>4기술 비교 표</strong>: 갈탄·IsoTES·PV·ETC 8행 지표 비교</li>
+     <li><strong>4개 차트</strong>: LCOH 막대, NPV 막대, 연 순비용 막대, CO₂ 도넛</li>
+   </ol>
+   <h3>핵심 지표 해석</h3>
+   <table>
+     <tr><th>지표</th><th>의미</th><th>판단 기준</th></tr>
+     <tr><td><strong>LCOH</strong></td><td>15년 누적 열 단가 (통화/MWh-th)</td><td>낮을수록 경제적</td></tr>
+     <tr><td><strong>NPV vs 갈탄</strong></td><td>15년 할인 누적 절감액</td><td>양수=갈탄보다 경제적, 음수=손해</td></tr>
+     <tr><td><strong>회수기간</strong></td><td>CAPEX 차이를 연 절감으로 나눈 값</td><td>수명(15년) 보다 짧으면 채택 가능</td></tr>
+     <tr><td><strong>CO₂ 절감</strong></td><td>갈탄 대비 연간 절감 tCO₂</td><td>ODA/GCF/탄소시장 직접 인용</td></tr>
+   </table>
+   <h3>탄소배출권 행 읽기</h3>
+   <p>탄소 토글이 켜져 있으면 "탄소배출권 수익" 행에 양수가 나옵니다. 이 값이 클수록 IsoTES/PV/ETC의 <strong>연 순비용</strong>이 작아지고 NPV·LCOH가 동시에 개선됩니다.</p>
+   <div class="warn">⚠ <strong>NPV가 음수인 시나리오도 가치가 있을 수 있습니다</strong>. 보조금(ODA, KOICA)이 CAPEX 차이를 메워주면 사업이 성립합니다. IR 미팅에서는 "NPV 음수 → 보조금 X달러 필요"로 환산해 제시하세요.</div>`,
+
+  // 4. 프리셋 활용
+  `<h3>14개 시나리오 프리셋</h3>
+   <p>우측 패널의 프리셋은 사용자 가이드 §5의 시나리오와 1:1로 매핑되어 있습니다. 클릭 한 번에 모든 슬라이더가 해당 시나리오 값으로 동기화됩니다.</p>
+   <h3>IR/ODA 발표용 시퀀스</h3>
+   <ol>
+     <li>🏠 <strong>PoC 기본</strong>으로 시작 — "현재 우리 위치"</li>
+     <li>⚡ <strong>시나리오 1: 심야할인 폐지</strong> → "정책 리스크 분석"</li>
+     <li>📈 <strong>시나리오 2: 스케일 100 MWh</strong> → "규모의 경제 효과"</li>
+     <li>🌳 <strong>시나리오 3b: 탄소 $15/t</strong> → "탄소시장 활용 시 효과"</li>
+     <li>🔥 <strong>시나리오 5: 갈탄 +50%</strong> → "리스크 헤지"</li>
+     <li>🌍 <strong>시나리오 9: 스케일 + 탄소</strong> → "최종 사업성"</li>
+   </ol>
+   <div class="tip">💡 한 시나리오 적용 후 슬라이더로 추가 조정하면 "프리셋 + 사용자 변형" 형태의 시뮬레이션이 됩니다. 프리셋 버튼이 회색으로 돌아오면 변형 상태라는 뜻.</div>
+   <h3>프리셋의 변경 항목</h3>
+   <p>각 프리셋은 일부 슬라이더만 변경하고 나머지는 기본값으로 초기화됩니다. 예를 들어 "시나리오 5: 갈탄 +50%"는 갈탄 가격 배율만 1.5로 변경하고 나머지(심야할인·탄소 등)는 모두 기본값으로 돌아갑니다. 이로써 <strong>한 변수만의 효과를 깨끗이 분리</strong>해서 볼 수 있습니다.</p>`,
+
+  // 5. 언어·통화·PDF
+  `<h3>언어 전환</h3>
+   <p>헤더의 <strong>"한국어 / English"</strong> 토글로 즉시 전환. URL에 <code>?lang=en</code> 파라미터를 추가하면 영어로 첫 로드.</p>
+   <ul>
+     <li>모든 슬라이더 라벨, 표 헤더, 차트 제목, 프리셋 설명이 전환됩니다</li>
+     <li>숫자 포맷·통화 기호는 언어와 독립</li>
+   </ul>
+   <h3>통화 전환</h3>
+   <p>헤더의 <strong>"USD / MNT / KRW"</strong> 토글. 내부 계산은 항상 USD 기준이며 표시 직전 환율 적용.</p>
+   <ul>
+     <li>USD: 기본값, 국제 IR 표준</li>
+     <li>MNT: 몽골 현지 발표용 (₮ 기호)</li>
+     <li>KRW: KOICA·한국 IR용 (₩ 기호)</li>
+     <li>환율은 Tier 3 슬라이더 B6 (USD→MNT), B7 (USD→KRW)에서 조정 가능</li>
+   </ul>
+   <h3>PDF 출력</h3>
+   <ol>
+     <li>헤더의 <strong>"📄 PDF/인쇄"</strong> 버튼 클릭 (또는 <kbd>Ctrl</kbd>+<kbd>P</kbd>)</li>
+     <li>인쇄 대화상자에서 <strong>"PDF로 저장"</strong> 선택</li>
+     <li>레이아웃 <strong>"가로 방향"</strong> 권장</li>
+     <li>결과: 슬라이더 패널은 자동 숨김. KPI·표·4개 차트가 한 페이지에</li>
+   </ol>
+   <div class="tip">💡 <strong>IR 자료 만들기</strong>: 프리셋별로 6번 인쇄해 6장 PDF를 만들면 "현재 → 정책 → 스케일 → 탄소 → 리스크 → 종합" 흐름의 IR 자료 완성.</div>`,
+
+  // 6. Q&A
+  `<h3>자주 묻는 질문</h3>
+   <h3>Q1. 결과가 Excel 모델과 정확히 같은가요?</h3>
+   <p>네, 모든 수식이 <code>heating_business_model_v1.xlsx v1.3</code>의 127개 수식과 1:1 매핑되어 있습니다. <strong>헤더의 "🔬 검증" 버튼</strong>을 누르거나 URL에 <code>?test=1</code>을 추가하면 검증 모드가 활성화되어 PoC·스케일업 5개 시나리오의 기준값과 JS 계산 결과를 표로 비교합니다 (허용 오차 5%). 모델·계산 변경 시 회귀 버그 즉시 감지용입니다.</p>
+   <h3>Q2. 이 데이터를 어디까지 신뢰할 수 있나요?</h3>
+   <p>입력 파라미터의 신뢰도가 결과 신뢰도를 결정합니다. CAPEX 실집행 데이터(시스템 제작·국제 물류)는 영수증 확인됨. 다만 <strong>스케일링 지수 b=0.7</strong>·<strong>일조량 4 kWh/m²/day</strong> 같은 가정값은 시장 추정치이므로 민감도 분석 필요.</p>
+   <h3>Q3. 갈탄 발열량은 왜 15 MJ/kg인가요?</h3>
+   <p>몽골산 갈탄(lignite, 저품질)의 평균 발열량입니다. 무연탄(anthracite)은 ~29 MJ/kg, 무연탄 기준 계산은 갈탄 소비량을 2배 과소 추정합니다. Seed 1 모니터링 보고서의 "19.44톤" 표기는 이 단위 오기에서 비롯되었고, 정정 후 194.4톤이 올바른 값입니다.</p>
+   <h3>Q4. 인터넷 없이 동작하나요?</h3>
+   <p>현재 버전은 Chart.js와 Alpine.js를 CDN에서 로드합니다. 완전 오프라인 사용 시 두 파일을 같은 폴더에 다운로드 받고 HTML의 <code>script src</code> 경로를 수정하세요. 별도 안내 문서는 사업성_분석 폴더 참조.</p>
+   <h3>Q5. 시뮬레이터에 없는 변수를 어떻게 추가하나요?</h3>
+   <p>Excel 모델 → JS 시뮬레이터는 단방향 미러입니다. Excel(<code>build_model.py</code>)을 먼저 수정하고, 그 결과를 시뮬레이터에 반영합니다. 새 파라미터 추가 시 GIGAette 기술팀에 요청하세요.</p>
+   <h3>Q6. 시나리오를 동료와 공유할 수 있나요?</h3>
+   <p>현재 버전은 URL 공유를 지원하지 않습니다. 대신 <strong>PDF 출력</strong>으로 결과 화면을 공유하세요. v2.1에서 URL 직렬화를 추가 예정.</p>
+   <h3>Q7. 결과 차트의 색상이 의미하는 것은?</h3>
+   <ul>
+     <li><span style="color:#d55e00;font-weight:bold;">■ 주황</span>: 갈탄 보일러</li>
+     <li><span style="color:#0072b2;font-weight:bold;">■ 파랑</span>: IsoTES + 그리드</li>
+     <li><span style="color:#e6c200;font-weight:bold;">■ 노랑</span>: 태양광 PV + IsoTES</li>
+     <li><span style="color:#009e73;font-weight:bold;">■ 녹색</span>: 태양열 ETC + IsoTES</li>
+   </ul>
+   <p>모든 차트에서 동일한 색을 사용합니다 (Okabe-Ito 색맹 친화 팔레트).</p>
+   <h3>버그 발견 또는 추가 기능 요청</h3>
+   <p>사내 Notion 또는 GIGAette 기술팀 직접 연락. 향후 v2.x에서 추가될 기능: A/B 시나리오 비교, 민감도 토네이도 차트, Monte Carlo, EIRR.</p>`,
+];
+
+const TUTORIAL_EN = [
+  // 0. Quick start
+  `<h3>30-second summary</h3>
+   <p>This simulator lets you <strong>instantly</strong> simulate the economics of the Tsetserleg, Mongolia IsoTES project via sliders. Compare 4 technologies at a glance: coal boiler vs IsoTES vs Solar PV vs Solar ETC.</p>
+   <h3>Get started in 3 minutes</h3>
+   <ol>
+     <li>Click a <strong>preset on the right panel</strong> to apply a common scenario (e.g., "🏠 PoC Baseline", "📈 S2: Scale-up 100 MWh")</li>
+     <li>Check the center: <strong>4 KPI cards</strong> (IsoTES CAPEX·NPV·LCOH·Payback) and the <strong>4-tech comparison table</strong></li>
+     <li>Fine-tune assumptions with the <strong>left sliders</strong> (night discount, carbon price, discount rate, etc.); results update in real time</li>
+   </ol>
+   <div class="tip">💡 <strong>IR/ODA demo tip</strong>: Click presets in sequence to tell a "current → after scale-up → with carbon credit" story in 1 minute.</div>
+   <h3>Screen layout</h3>
+   <table>
+     <tr><th>Area</th><th>Role</th></tr>
+     <tr><td>Top header</td><td>Language (KO/EN), Currency (USD/MNT/KRW), PDF export, Reset</td></tr>
+     <tr><td>Left panel</td><td>Mode + Parameter sliders (Tier 1/2/3)</td></tr>
+     <tr><td>Center</td><td>Meta bar → KPI cards → 4-tech table → 4 charts</td></tr>
+     <tr><td>Right panel</td><td>14 scenario presets (mapped 1:1 with User Guide §5)</td></tr>
+   </table>`,
+
+  // 1. Mode
+  `<h3>PoC vs Scale-up Mode</h3>
+   <p>Choose between two operating modes at the top-left of the parameter panel.</p>
+   <table>
+     <tr><th>Mode</th><th>Target</th><th>Capacity</th><th>Reference sheet</th></tr>
+     <tr><td><strong>PoC</strong></td><td>Current pilot</td><td>1.5 MWh (fixed)</td><td>03_PoC_Result</td></tr>
+     <tr><td><strong>Scale-up</strong></td><td>Post-commercialization</td><td>1.5~500 MWh (slider)</td><td>04_Scaleup_Result</td></tr>
+   </table>
+   <h3>How mode switching works</h3>
+   <ul>
+     <li>PoC → Scale-up: target capacity initializes to 100 MWh</li>
+     <li>Scale-up → PoC: capacity auto-restores to 1.5 MWh</li>
+     <li><strong>CAPEX scaling</strong>: Lang factor applied (CAPEX = CAPEX_base × (Q/Q_base)<sup>b</sup>, default b=0.7)</li>
+     <li><strong>Opex & fuel</strong>: scales linearly with capacity</li>
+   </ul>
+   <div class="tip">💡 <strong>Mode indicator</strong>: The blue meta bar atop the results area always shows "PoC Mode — 1.5 MWh" or "Scale-up Mode — multiple/large facility". A small text next to mode radio shows source sheet (e.g., "Based on 03_PoC_Result").</div>
+   <div class="warn">⚠ <strong>Caution</strong>: Even when NPV is large positive in Scale-up mode, actually deploying 100 MWh requires separate market & policy review. NPV is a <strong>necessary</strong> condition, not sufficient.</div>`,
+
+  // 2. Slider
+  `<h3>3-Tier slider taxonomy</h3>
+   <table>
+     <tr><th>Tier</th><th>Count</th><th>Purpose</th><th>Access</th></tr>
+     <tr><td><strong>Tier 1 Basic</strong></td><td>6 + carbon toggle</td><td>Frequently asked IR variables</td><td>Always shown</td></tr>
+     <tr><td><strong>Tier 2 Advanced</strong></td><td>17</td><td>Physical & financial assumptions</td><td>Click "Advanced"</td></tr>
+     <tr><td><strong>Tier 3 CAPEX Detail</strong></td><td>13</td><td>Component-level unit prices</td><td>Click "CAPEX Details"</td></tr>
+   </table>
+   <h3>Slider usage</h3>
+   <ul>
+     <li><strong>Drag</strong>: mouse-drag updates results immediately (50ms debounce)</li>
+     <li><strong>Direct input</strong>: type into the number box and press <kbd>Enter</kbd> — values outside slider range allowed</li>
+     <li><strong>Keyboard</strong>: click slider then <kbd>←</kbd> <kbd>→</kbd> for fine adjustment</li>
+     <li><strong>Excel cell refs</strong>: Tier 3 sliders show small gray cell coordinates (e.g., B68) for cross-reference</li>
+   </ul>
+   <h3>Key Tier 1 sliders</h3>
+   <table>
+     <tr><th>Slider</th><th>Meaning</th><th>Typical scenarios</th></tr>
+     <tr><td>Night discount rate</td><td>Mongolia government power discount policy</td><td>50%=current / 0%=abolished</td></tr>
+     <tr><td>Carbon price</td><td>USD per tCO₂</td><td>$15=VCM / $50=SCC / $150=EU ETS</td></tr>
+     <tr><td>Discount rate</td><td>Time value for NPV</td><td>6%=ODA / 10%=private IR</td></tr>
+     <tr><td>Target capacity</td><td>Scale-up size (scale mode only)</td><td>100 MWh=1,000m³ class</td></tr>
+     <tr><td>Scaling exponent b</td><td>Economies of scale</td><td>0.7=normal / 0.6=strong / 1.0=none</td></tr>
+     <tr><td>Coal price multiplier</td><td>Fuel price variation</td><td>1.0=current / 1.5=hike / 0.7=drop</td></tr>
+   </table>
+   <div class="tip">💡 <strong>Carbon credit toggle</strong>: a checkbox below the slider group toggles on/off. When off, carbon price is ignored.</div>`,
+
+  // 3. Results
+  `<h3>4 sections of results</h3>
+   <ol>
+     <li><strong>Meta info bar</strong> (blue): current mode, capacity, heating period, lifetime, discount rate, carbon setting — preserves context in screenshots/PDFs</li>
+     <li><strong>4 KPI cards</strong>: IsoTES CAPEX·NPV·LCOH·Payback. NPV and Payback cards auto-color positive (green) / negative (red)</li>
+     <li><strong>4-tech comparison table</strong>: 8-row comparison across Coal, IsoTES, PV, ETC</li>
+     <li><strong>4 charts</strong>: LCOH bar, NPV bar, Annual net cost bar, CO₂ doughnut</li>
+   </ol>
+   <h3>Key metrics</h3>
+   <table>
+     <tr><th>Metric</th><th>Meaning</th><th>Judgment</th></tr>
+     <tr><td><strong>LCOH</strong></td><td>15-yr levelized cost of heat (currency/MWh-th)</td><td>Lower = more economic</td></tr>
+     <tr><td><strong>NPV vs Coal</strong></td><td>15-yr discounted cumulative savings</td><td>Positive = beats coal; negative = worse</td></tr>
+     <tr><td><strong>Payback</strong></td><td>CAPEX delta divided by annual savings</td><td>Less than lifetime (15yr) = acceptable</td></tr>
+     <tr><td><strong>CO₂ savings</strong></td><td>Annual tCO₂ reduction vs coal</td><td>Cite for ODA/GCF/carbon market</td></tr>
+   </table>
+   <h3>Reading the carbon credit row</h3>
+   <p>When carbon toggle is ON, "Carbon credit revenue" row shows positive values. The larger this is, the smaller the <strong>annual net cost</strong> of IsoTES/PV/ETC, which improves both LCOH and NPV simultaneously.</p>
+   <div class="warn">⚠ <strong>Negative NPV scenarios can still have value</strong>. If a subsidy (ODA, KOICA) covers the CAPEX gap, the project is viable. In IR meetings, translate "Negative NPV" to "Required subsidy: $X".</div>`,
+
+  // 4. Presets
+  `<h3>14 scenario presets</h3>
+   <p>The right panel presets map 1:1 with User Guide §5 scenarios. One click syncs all sliders to that scenario's values.</p>
+   <h3>IR/ODA presentation sequence</h3>
+   <ol>
+     <li>🏠 <strong>PoC Baseline</strong> — "Where we are now"</li>
+     <li>⚡ <strong>S1: Night discount abolished</strong> → "Policy risk analysis"</li>
+     <li>📈 <strong>S2: Scale-up 100 MWh</strong> → "Economies of scale"</li>
+     <li>🌳 <strong>S3b: Carbon $15/t</strong> → "Carbon market impact"</li>
+     <li>🔥 <strong>S5: Coal +50%</strong> → "Risk hedge"</li>
+     <li>🌍 <strong>S9: Scale + Carbon</strong> → "Final business case"</li>
+   </ol>
+   <div class="tip">💡 After applying a preset, adjust sliders to create "preset + variation" simulations. Preset button turning gray = you've modified from baseline.</div>
+   <h3>What each preset changes</h3>
+   <p>Each preset modifies only a subset of sliders, resetting others to defaults. E.g., "S5: Coal +50%" only changes coal price multiplier to 1.5, with night discount, carbon, etc. all back to defaults. This <strong>cleanly isolates the effect of a single variable</strong>.</p>`,
+
+  // 5. Language·Currency·PDF
+  `<h3>Language toggle</h3>
+   <p>Use the header <strong>"한국어 / English"</strong> toggle to switch instantly. Add <code>?lang=en</code> to URL for English-first load.</p>
+   <ul>
+     <li>All slider labels, table headers, chart titles, preset descriptions are translated</li>
+     <li>Number format & currency symbols are language-independent</li>
+   </ul>
+   <h3>Currency toggle</h3>
+   <p>Header <strong>"USD / MNT / KRW"</strong> toggle. Internal computation always in USD; FX applied just before display.</p>
+   <ul>
+     <li>USD: default, international IR standard</li>
+     <li>MNT: for Mongolia local presentations (₮ symbol)</li>
+     <li>KRW: for KOICA / Korean IR (₩ symbol)</li>
+     <li>FX rates adjustable in Tier 3 sliders B6 (USD→MNT), B7 (USD→KRW)</li>
+   </ul>
+   <h3>PDF export</h3>
+   <ol>
+     <li>Click header <strong>"📄 PDF/Print"</strong> button (or <kbd>Ctrl</kbd>+<kbd>P</kbd>)</li>
+     <li>In print dialog, choose <strong>"Save as PDF"</strong></li>
+     <li>Layout: <strong>landscape</strong> recommended</li>
+     <li>Result: slider panel auto-hidden; KPIs, table, and 4 charts fit one page</li>
+   </ol>
+   <div class="tip">💡 <strong>Build IR materials</strong>: print 6 times across presets to create a 6-page PDF flow: "current → policy → scale → carbon → risk → final".</div>`,
+
+  // 6. FAQ
+  `<h3>Frequently asked questions</h3>
+   <h3>Q1. Are results exactly the same as the Excel model?</h3>
+   <p>Yes — all formulas are 1:1 mapped to the 127 formulas in <code>heating_business_model_v1.xlsx v1.3</code>. Click the <strong>"🔬 Verify" button</strong> in the header (or add <code>?test=1</code> to URL) to activate verification mode that compares 5 PoC + Scale-up reference scenarios against JS computation (5% tolerance). Use this for regression detection when modifying the model.</p>
+   <h3>Q2. How much can I trust this data?</h3>
+   <p>Result reliability depends on input parameter reliability. CAPEX actuals (system production · international logistics) are receipt-verified. However, assumptions like <strong>scaling exponent b=0.7</strong> and <strong>solar irradiation 4 kWh/m²/day</strong> are market estimates — sensitivity analysis recommended.</p>
+   <h3>Q3. Why is coal heating value 15 MJ/kg?</h3>
+   <p>This is the average heating value of Mongolian lignite (low-grade coal). Anthracite is ~29 MJ/kg; using anthracite would underestimate coal consumption by 2x. The Seed 1 monitoring report's "19.44 tons" entry stems from this unit confusion — corrected value is 194.4 tons.</p>
+   <h3>Q4. Does it work offline?</h3>
+   <p>The current version loads Chart.js and Alpine.js from CDN. For full offline use, download both files to the same folder and modify the HTML <code>script src</code> paths. See the simulator folder for a standalone guide.</p>
+   <h3>Q5. How do I add a variable not in the simulator?</h3>
+   <p>The Excel model → JS simulator is a one-way mirror. Modify Excel (<code>build_model.py</code>) first, then propagate to the simulator. Request new parameters from the GIGAette tech team.</p>
+   <h3>Q6. Can I share a scenario with a colleague?</h3>
+   <p>Current version doesn't support URL sharing. Use <strong>PDF export</strong> instead. URL serialization planned for v2.1.</p>
+   <h3>Q7. What do the chart colors mean?</h3>
+   <ul>
+     <li><span style="color:#d55e00;font-weight:bold;">■ Orange</span>: Coal boiler</li>
+     <li><span style="color:#0072b2;font-weight:bold;">■ Blue</span>: IsoTES + Grid</li>
+     <li><span style="color:#e6c200;font-weight:bold;">■ Yellow</span>: Solar PV + IsoTES</li>
+     <li><span style="color:#009e73;font-weight:bold;">■ Green</span>: Solar ETC + IsoTES</li>
+   </ul>
+   <p>All charts use the same colors (Okabe-Ito colorblind-friendly palette).</p>
+   <h3>Bug reports & feature requests</h3>
+   <p>Contact GIGAette tech team via Notion. Planned for v2.x: A/B scenario comparison, sensitivity tornado chart, Monte Carlo, EIRR.</p>`,
+];
+
+// ============================================================
+// Verification reference data (USD, PoC 1.5 MWh baseline, hhv=15 corrected)
+// Hand-computed from build_model.py SSoT — do not regenerate from
+// scenario_analysis_v2.py without first patching its hhv=29.3 → 15.
+// ============================================================
+//   coal_ton/yr = 3600×243/0.30/15/1000 = 194.4 ton  (Excel 01_Coal!B7)
+//   fuel_usd    = 194.4 × (136800+171000)/2 / 3420 = 8,748
+//   transport   = 360 × 20 = 7,200
+//   coal_maint  = 30000 × 0.04 = 1,200
+//   coalAnn     = 8,748 + 7,200 + 1,200 = 17,148 USD
+//   coal_co2    = 194.4 × 2.36 = 458.78 tCO2/yr
+//   grid_co2    = 255,789 × 0.70 / 1000 = 179.05 tCO2/yr
+const EXPECTED = [
+  {
+    id: 's_base', scenario_ko: 'S1: PoC 기본', scenario_en: 'S1: PoC baseline',
+    p: { mode: 'poc', night_disc: 0.50, carbon_on: false, target_cap: 1.5 },
+    expect: {
+      coalAnn:    17148,    // 8748 fuel + 7200 transport + 1200 maint
+      isotesNet:  10062,    // electricity (50% disc) + IsoTES maint
+      pvNet:      12181,    // PV backup (30%) + (PV+IsoTES) maint
+      etcNet:     4337,     // ETC maint only (100% solar coverage)
+    }
+  },
+  {
+    id: 's_carbon50', scenario_ko: 'S2: 탄소 $50/t', scenario_en: 'S2: Carbon $50/t',
+    p: { mode: 'poc', night_disc: 0.50, carbon_on: true, carbon_price: 50, target_cap: 1.5 },
+    // ISO credit  = (458.78 - 179.05) × 50 = 13,987;   net = 10,062 - 13,987 = -3,925
+    // ETC credit  = 458.78 × 50           = 22,939;   net = 4,337 - 22,939 = -18,602
+    expect: { isotesNet: -3925, etcNet: -18602 }
+  },
+  {
+    id: 's_etc70', scenario_ko: 'S3: ETC 70% 보수', scenario_en: 'S3: ETC 70% conservative',
+    p: { mode: 'poc', night_disc: 0.50, carbon_on: false, etc_cover: 0.70, target_cap: 1.5 },
+    expect: { etcNet: 8263 }   // 30% backup electricity at full rate + ETC maint
+  },
+  // === 스케일업 검증 시나리오 (target_cap=100, scale=66.67, b=0.7) ===
+  {
+    id: 's_scale100', scenario_ko: 'S4: 스케일 100MWh', scenario_en: 'S4: Scale-up 100MWh',
+    p: { mode: 'scale', target_cap: 100, scale_exp: 0.7, night_disc: 0.50, carbon_on: false },
+    // scale = 66.67; 갈탄 12,960t/yr × MNT-mid + transport 480K + maint 80K = 1,143,200
+    // CAPEX_iso = 175,891 × 66.67^0.7 = 3,326,431
+    expect: {
+      coalAnn:    1143200,
+      isotesNet:  502817,
+      pvNet:      644091,
+      etcNet:     121110,
+    }
+  },
+  {
+    id: 's_scale100_c15', scenario_ko: 'S5: 스케일100 + 탄소$15', scenario_en: 'S5: Scale100 + Carbon$15',
+    p: { mode: 'scale', target_cap: 100, scale_exp: 0.7, night_disc: 0.50, carbon_on: true, carbon_price: 15 },
+    expect: {
+      isotesNet:  223085,
+      pvNet:      239023,
+      etcNet:    -337674,
+    }
+  },
+];
+
+// ============================================================
+// Non-reactive chart storage (must NOT be inside Alpine data proxy —
+// Chart.js 인스턴스를 Proxy로 감싸면 update('none')가 silent failure)
+// ============================================================
+const CHART_INSTANCES = {};
+
+// ============================================================
+// Alpine component
+// ============================================================
+function simulator() {
+  return {
+    p: {},
+    r: { capex: {}, gross: {}, credit: {}, net: {}, lcoh: {}, payback: {}, npv: {}, co2: {} },
+    tier1Keys: [], tier2Keys: [], tier3Keys: [],
+    activePreset: 0,
+    testMode: false,
+    testResults: [],
+    chartsReady: false,
+    _debounce: null,
+    presets: PRESETS,
+    tutorialOpen: false,
+    tutorialTab: 0,
+    tutorialSkip: false,
+    tutorialTabs: [
+      { key: 'tabQuick' },
+      { key: 'tabMode' },
+      { key: 'tabSlider' },
+      { key: 'tabResults' },
+      { key: 'tabPresets' },
+      { key: 'tabIO' },
+      { key: 'tabFaq' },
+    ],
+
+    init() {
+      for (const [k, def] of Object.entries(PARAM_DEFS)) this.p[k] = def.default;
+      this.p.mode = 'poc';
+      this.p.ccy = 'USD';
+      this.p.lang = 'ko';
+      this.p.carbon_on = false;
+      this.tier1Keys = Object.keys(PARAM_DEFS).filter(k => PARAM_DEFS[k].tier === 1);
+      this.tier2Keys = Object.keys(PARAM_DEFS).filter(k => PARAM_DEFS[k].tier === 2);
+      this.tier3Keys = Object.keys(PARAM_DEFS).filter(k => PARAM_DEFS[k].tier === 3);
+
+      const url = new URL(window.location.href);
+      this.testMode = url.searchParams.get('test') === '1';
+      const langParam = url.searchParams.get('lang');
+      if (langParam === 'en' || langParam === 'ko') {
+        this.p.lang = langParam;
+        document.documentElement.setAttribute('lang', langParam);
+      }
+
+      // 초기 compute는 동기 실행 — 차트가 0으로 깜빡이는 것 방지
+      this.r = compute(this.p);
+      // Robust chart init: wait for x-cloak removal + first paint + Chart.js ready.
+      // setTimeout(0) → next macrotask after Alpine processes x-cloak.
+      // requestAnimationFrame → after browser paint (canvas dimensions ready).
+      const tryInit = (attempt = 0) => {
+        if (typeof Chart === 'undefined') {
+          if (attempt < 50) return setTimeout(() => tryInit(attempt + 1), 100);
+          console.error('[GIGAette] Chart.js failed to load after 5s');
+          return;
+        }
+        const canvas = document.getElementById('lcohChart');
+        if (!canvas || canvas.offsetWidth === 0) {
+          if (attempt < 30) return requestAnimationFrame(() => tryInit(attempt + 1));
+          console.warn('[GIGAette] Canvas size 0 after 30 RAFs — proceeding anyway');
+        }
+        this.initCharts();
+      };
+      setTimeout(() => tryInit(), 0);
+
+      if (this.testMode) this.runVerification();
+
+      // First-visit tutorial / 첫 방문 튜토리얼
+      try {
+        const seen = localStorage.getItem('gigaette_heatingsim_v2_tut_seen');
+        if (!seen) this.openTutorial();
+      } catch (e) { /* localStorage blocked (file://): silently skip */ }
+    },
+
+    openTutorial() {
+      this.tutorialOpen = true;
+      this.tutorialTab = 0;
+    },
+    closeTutorial() {
+      this.tutorialOpen = false;
+      if (this.tutorialSkip) {
+        try { localStorage.setItem('gigaette_heatingsim_v2_tut_seen', '1'); } catch (e) {}
+      }
+    },
+    tutorialContent() {
+      return (this.p.lang === 'en' ? TUTORIAL_EN : TUTORIAL_KO)[this.tutorialTab] || '';
+    },
+
+    // ===== Translation helpers / 번역 헬퍼 =====
+    t(key) {
+      const lang = this.p.lang || 'ko';
+      return TRANSLATIONS[lang][key] || TRANSLATIONS.ko[key] || key;
+    },
+    param(key) { return PARAM_DEFS[key]; },
+    paramLabel(key) {
+      const def = PARAM_DEFS[key];
+      const lang = this.p.lang || 'ko';
+      return def['label_' + lang] || def.label_ko;
+    },
+    presetName(preset) {
+      return preset['name_' + (this.p.lang || 'ko')] || preset.name_ko;
+    },
+    presetDesc(preset) {
+      return preset['desc_' + (this.p.lang || 'ko')] || preset.desc_ko;
+    },
+    setLang(lang) {
+      this.p.lang = lang;
+      document.documentElement.setAttribute('lang', lang);
+      this.updateCharts();   // 차트 라벨 즉시 재렌더 (다음 슬라이더 입력 대기 X)
+      if (this.testMode) this.runVerification();
+    },
+
+    toggleTestMode() {
+      this.testMode = !this.testMode;
+      if (this.testMode) {
+        this.runVerification();
+      } else {
+        this.testResults = [];
+      }
+    },
+
+    // ===== Mode / 모드 =====
+    setMode(mode) {
+      this.p.mode = mode;
+      if (mode === 'poc') this.p.target_cap = 1.5;
+      else if (mode === 'scale' && this.p.target_cap < 10) this.p.target_cap = 100;
+      this.recompute();
+    },
+    modeLabel() { return this.p.mode === 'poc' ? this.t('pocLabel') : this.t('scaleLabel'); },
+    modeBadge() { return this.p.mode === 'poc' ? this.t('pocBadge') : this.t('scaleBadge'); },
+    modeBtnStyle(mode) {
+      const active = this.p.mode === mode;
+      return `flex:1; padding:6px; font-size:11px; cursor:pointer; border:1px solid ${active ? 'var(--accent)' : 'var(--border)'}; background:${active ? 'var(--accent)' : 'var(--panel)'}; color:${active ? 'white' : 'var(--ink)'};`;
+    },
+    currentCapacity() { return this.p.mode === 'poc' ? 1.5 : this.p.target_cap; },
+
+    // ===== Presets / 프리셋 =====
+    applyPreset(idx) {
+      this.activePreset = idx;
+      // Reset to defaults, then apply preset's changes
+      const lang = this.p.lang, ccy = this.p.ccy;
+      for (const [k, def] of Object.entries(PARAM_DEFS)) this.p[k] = def.default;
+      this.p.mode = 'poc';
+      this.p.lang = lang;
+      this.p.ccy = ccy;
+      this.p.carbon_on = false;
+      Object.assign(this.p, PRESETS[idx].changes);
+      if (this.p.mode === 'poc') this.p.target_cap = 1.5;
+      this.recompute();
+    },
+    resetAll() { this.applyPreset(0); },
+
+    // ===== Recompute / 재계산 =====
+    recompute() {
+      // 50ms debounce — Chart.js update overhead 보호. 튜토리얼 문서와 동기화.
+      if (this._debounce) clearTimeout(this._debounce);
+      this._debounce = setTimeout(() => {
+        this.r = compute(this.p);
+        this.updateCharts();
+      }, 50);
+    },
+
+    // ===== Formatters / 포맷터 =====
+    fmt(v) {
+      if (!Number.isFinite(v)) return '—';
+      const sym = this.p.ccy === 'USD' ? '$' : this.p.ccy === 'MNT' ? '₮' : '₩';
+      const av = Math.abs(v);
+      let s;
+      if (av >= 1e9) s = (v/1e9).toFixed(2) + 'B';
+      else if (av >= 1e6) s = (v/1e6).toFixed(2) + 'M';
+      else if (av >= 1e3) s = (v/1e3).toFixed(1) + 'K';
+      else s = v.toFixed(0);
+      return sym + s;
+    },
+    fmtSigned(v) {
+      if (!Number.isFinite(v)) return '—';
+      const sym = this.p.ccy === 'USD' ? '$' : this.p.ccy === 'MNT' ? '₮' : '₩';
+      const sign = v >= 0 ? '+' : '−';
+      const av = Math.abs(v);
+      let s;
+      if (av >= 1e9) s = (av/1e9).toFixed(2) + 'B';
+      else if (av >= 1e6) s = (av/1e6).toFixed(2) + 'M';
+      else if (av >= 1e3) s = (av/1e3).toFixed(1) + 'K';
+      else s = av.toFixed(0);
+      return sign + sym + s;
+    },
+    fmtPerMWh(v) {
+      if (!Number.isFinite(v)) return '—';
+      const sym = this.p.ccy === 'USD' ? '$' : this.p.ccy === 'MNT' ? '₮' : '₩';
+      return sym + v.toFixed(1) + '/MWh';
+    },
+    fmtPayback(v) {
+      if (!Number.isFinite(v) || v > 50) return this.t('over50');
+      return v.toFixed(1) + ' ' + this.t('years');
+    },
+    formatMWh(v) { return v >= 100 ? v.toFixed(0) + ' MWh' : v.toFixed(1) + ' MWh'; },
+
+    // ===== Charts / 차트 =====
+    // CHART_INSTANCES (모듈 레벨)에 저장해 Alpine Proxy 회피.
+    initCharts() {
+      try {
+        const colors = { coal: '#d55e00', isotes: '#0072b2', pv: '#e6c200', etc: '#009e73' };
+        const techColors = [colors.coal, colors.isotes, colors.pv, colors.etc];
+        const altColors  = [colors.isotes, colors.pv, colors.etc];
+        const techLabels = [this.t('coal'), this.t('isotesGrid'), this.t('pvIsotes'), this.t('etcIsotes')];
+        const altLabels  = [this.t('isotesGrid'), this.t('pvIsotes'), this.t('etcIsotes')];
+        const commonOpts = {
+          responsive: true, maintainAspectRatio: false, animation: false,
+          plugins: { legend: { display: false }, tooltip: { enabled: true } },
+          scales: { y: { ticks: { font: { size: 10 } } }, x: { ticks: { font: { size: 10 } } } }
+        };
+        const r = this.r;
+
+        const lcohEl = document.getElementById('lcohChart');
+        const npvEl  = document.getElementById('npvChart');
+        const costEl = document.getElementById('costChart');
+        const co2El  = document.getElementById('co2Chart');
+        if (!lcohEl || !npvEl || !costEl || !co2El) {
+          console.error('[GIGAette] Chart canvas elements not found in DOM');
+          return;
+        }
+
+        // 기존 인스턴스가 있으면 destroy (재초기화 시 메모리 누수 방지)
+        for (const k of Object.keys(CHART_INSTANCES)) {
+          try { CHART_INSTANCES[k].destroy(); } catch (e) {}
+          delete CHART_INSTANCES[k];
+        }
+
+        CHART_INSTANCES.lcoh = new Chart(lcohEl, {
+          type: 'bar',
+          data: { labels: techLabels,
+                  datasets: [{ label: 'LCOH', data: [r.lcoh.coal||0, r.lcoh.isotes||0, r.lcoh.pv||0, r.lcoh.etc||0],
+                               backgroundColor: techColors }] },
+          options: { ...commonOpts, indexAxis: 'y' }
+        });
+        CHART_INSTANCES.npv = new Chart(npvEl, {
+          type: 'bar',
+          data: { labels: altLabels,
+                  datasets: [{ label: 'NPV', data: [r.npv.isotes||0, r.npv.pv||0, r.npv.etc||0],
+                               backgroundColor: altColors }] },
+          options: { ...commonOpts, indexAxis: 'y' }
+        });
+        CHART_INSTANCES.cost = new Chart(costEl, {
+          type: 'bar',
+          data: { labels: techLabels,
+                  datasets: [{ label: 'Cost', data: [r.net.coal||0, r.net.isotes||0, r.net.pv||0, r.net.etc||0],
+                               backgroundColor: techColors }] },
+          options: commonOpts
+        });
+        CHART_INSTANCES.co2 = new Chart(co2El, {
+          type: 'doughnut',
+          data: { labels: altLabels,
+                  datasets: [{ data: [r.co2.isotes||0, r.co2.pv||0, r.co2.etc||0], backgroundColor: altColors }] },
+          options: { responsive: true, maintainAspectRatio: false, animation: false,
+                     plugins: { legend: { position: 'right', labels: { font: { size: 10 } } } } }
+        });
+
+        this.chartsReady = true;
+        console.log('[GIGAette] Charts initialized successfully');
+      } catch (e) {
+        console.error('[GIGAette] Chart init failed:', e);
+      }
+    },
+
+    updateCharts() {
+      if (!this.chartsReady || !CHART_INSTANCES.lcoh) return;
+      try {
+        const r = this.r;
+        // Update labels (언어 토글 즉시 반영)
+        const techLabels = [this.t('coal'), this.t('isotesGrid'), this.t('pvIsotes'), this.t('etcIsotes')];
+        const altLabels  = [this.t('isotesGrid'), this.t('pvIsotes'), this.t('etcIsotes')];
+
+        CHART_INSTANCES.lcoh.data.labels = techLabels;
+        CHART_INSTANCES.lcoh.data.datasets[0].data = [r.lcoh.coal||0, r.lcoh.isotes||0, r.lcoh.pv||0, r.lcoh.etc||0];
+
+        CHART_INSTANCES.npv.data.labels = altLabels;
+        CHART_INSTANCES.npv.data.datasets[0].data = [r.npv.isotes||0, r.npv.pv||0, r.npv.etc||0];
+
+        CHART_INSTANCES.cost.data.labels = techLabels;
+        CHART_INSTANCES.cost.data.datasets[0].data = [r.net.coal||0, r.net.isotes||0, r.net.pv||0, r.net.etc||0];
+
+        CHART_INSTANCES.co2.data.labels = altLabels;
+        CHART_INSTANCES.co2.data.datasets[0].data = [r.co2.isotes||0, r.co2.pv||0, r.co2.etc||0];
+
+        CHART_INSTANCES.lcoh.update('none');
+        CHART_INSTANCES.npv.update('none');
+        CHART_INSTANCES.cost.update('none');
+        CHART_INSTANCES.co2.update('none');
+      } catch (e) {
+        console.error('[GIGAette] Chart update failed:', e);
+      }
+    },
+
+    // ===== Verification / 검증 =====
+    runVerification() {
+      const rows = [];
+      const lang = this.p.lang || 'ko';
+      for (const t of EXPECTED) {
+        const p = {};
+        for (const [k, def] of Object.entries(PARAM_DEFS)) p[k] = def.default;
+        p.mode = 'poc'; p.ccy = 'USD'; p.carbon_on = false;
+        Object.assign(p, t.p);
+        if (p.mode === 'poc') p.target_cap = 1.5;
+        const out = compute(p);
+        const checks = [
+          ['Coal annual / 갈탄 연비용',     out.net.coal,    t.expect.coalAnn],
+          ['IsoTES net / IsoTES 순비용', out.net.isotes,  t.expect.isotesNet],
+          ['PV net / PV 순비용',         out.net.pv,      t.expect.pvNet],
+          ['ETC net / ETC 순비용',       out.net.etc,     t.expect.etcNet],
+        ];
+        for (const [metric, actual, expected] of checks) {
+          if (expected === undefined || expected === null) continue;
+          const err = expected === 0 ? Math.abs(actual) : Math.abs((actual - expected) / expected * 100);
+          rows.push({
+            id: t.id + '_' + metric,
+            scenario: t['scenario_' + lang] || t.scenario_ko,
+            metric, expected, actual, error: err,
+            pass: err < 5.0,
+          });
+        }
+      }
+      this.testResults = rows;
+    },
+  };
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,40 @@
+Copyright (c) 2026 GIGAette Co., Ltd. All rights reserved.
+
+This software and accompanying documentation (the "Simulator") are provided
+for the purpose of demonstrating the economic feasibility of GIGAette's
+IsoTES (Isobaric Thermal Energy Storage) system in district heating
+applications in Mongolia, including but not limited to investor relations,
+KOICA reporting, and Official Development Assistance (ODA) presentations.
+
+PERMITTED USE
+-------------
+- Viewing and interacting with the Simulator via the official live demo URL
+- Downloading the Simulator HTML for personal evaluation purposes
+- Citing simulation results in third-party reports with attribution to
+  GIGAette Co., Ltd.
+- Forking the repository for non-commercial educational purposes
+
+PROHIBITED USE
+--------------
+- Commercial redistribution, sublicensing, or sale of the Simulator
+- Removal or alteration of attribution, copyright notices, or branding
+- Use of the Simulator's calculations or default parameter values to make
+  competing or derivative business viability claims without independent
+  verification and explicit acknowledgment of the source
+- Misrepresentation of simulation outputs as official GIGAette financial
+  guidance or investment advice
+
+DISCLAIMER
+----------
+The Simulator is provided "AS IS" without warranty of any kind, express or
+implied. Default parameter values reflect estimates and assumptions current
+as of the build date and are subject to change. Procurement-specific cost
+data has been intentionally rounded for public release; precise figures
+remain proprietary. Users are responsible for independent due diligence
+when making investment, procurement, or policy decisions based on
+simulation outputs.
+
+CONTACT
+-------
+For licensing inquiries or commercial use authorization, contact:
+GIGAette Co., Ltd.

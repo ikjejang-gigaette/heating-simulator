@@ -1,0 +1,21 @@
+# Whitelist 방식: 배포에 필요한 파일만 명시 추적
+# 그 외 모든 로컬 파일(소스 빌드 스크립트, Excel 산출물, 내부 문서 등)은 자동 제외
+
+# 1. 모든 파일/폴더 무시
+*
+
+# 2. 추적 허용 파일 명시
+!.gitignore
+!README.md
+!LICENSE
+!index.html
+
+# 3. (참고) 의도적으로 제외된 항목들:
+#    - heating_simulator_v2.html : 로컬 개발 사본 (정확값 보존)
+#    - build_model.py             : Excel 모델 빌드 스크립트 (조달 정보 포함)
+#    - heating_business_model_v1.xlsx : 빌드 산출물
+#    - scenario_analysis*.py      : 내부 검증 스크립트
+#    - verify_formulas.py         : 수식 검증 유틸
+#    - 사용자_가이드.md            : 내부 상세 가이드
+#    - 모델_설계_노트.md           : 내부 설계 노트
+#    - _unpacked/                 : xlsx 압축 해제 디버그 잔여물
