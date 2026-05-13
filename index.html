@@ -856,31 +856,97 @@
           <button class="modal-close" @click="closeCostEditor()">✕</button>
         </div>
         <div class="modal-tabs">
-          <button :class="{active: costEditorTab === 'common'}" @click="costEditorTab = 'common'" x-text="t('costTabCommon')"></button>
-          <button :class="{active: costEditorTab === 'isotes'}" @click="costEditorTab = 'isotes'" x-text="t('costTabIsotes')"></button>
-          <button :class="{active: costEditorTab === 'pv'}"     @click="costEditorTab = 'pv'"     x-text="t('costTabPv')"></button>
-          <button :class="{active: costEditorTab === 'etc'}"    @click="costEditorTab = 'etc'"    x-text="t('costTabEtc')"></button>
-          <button :class="{active: costEditorTab === 'opex'}"   @click="costEditorTab = 'opex'"   x-text="t('costTabOpex')"></button>
+          <button :class="{active: costEditorTab === 'common'}"  @click="costEditorTab = 'common'"  x-text="t('costTabCommon')"></button>
+          <button :class="{active: costEditorTab === 'isotes'}"  @click="costEditorTab = 'isotes'"  x-text="t('costTabIsotes')"></button>
+          <button :class="{active: costEditorTab === 'pv'}"      @click="costEditorTab = 'pv'"      x-text="t('costTabPv')"></button>
+          <button :class="{active: costEditorTab === 'etc'}"     @click="costEditorTab = 'etc'"     x-text="t('costTabEtc')"></button>
+          <button :class="{active: costEditorTab === 'opex'}"    @click="costEditorTab = 'opex'"    x-text="t('costTabOpex')"></button>
+          <button :class="{active: costEditorTab === 'tornado'}" @click="costEditorTab = 'tornado'; renderTornado()" x-text="t('costTabTornado')"></button>
         </div>
         <div class="modal-body">
+          <!-- 토네이도 탭 (특수 케이스) -->
+          <template x-if="costEditorTab === 'tornado'">
+            <div>
+              <p style="font-size: 12px; color: var(--muted); margin-bottom: 10px;" x-text="t('costTornadoDesc')"></p>
+              <template x-if="computeTornado().length === 0">
+                <div style="padding: 24px; text-align: center; color: var(--muted); background: var(--bg); border-radius: 4px;"
+                     x-text="t('costTornadoNoData')"></div>
+              </template>
+              <template x-if="computeTornado().length > 0">
+                <div style="position: relative; height: 480px;">
+                  <canvas id="tornadoChart"></canvas>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <!-- 일반 탭들 (분해 편집) -->
+          <template x-if="costEditorTab !== 'tornado'">
+            <div>
+          <!-- 사용자 정의 부모 항목 추가 폼 -->
+          <div style="margin-bottom: 12px; padding: 8px 10px; background: var(--bg); border-radius: 4px;">
+            <template x-if="!customParentForm._open">
+              <button class="cost-add-btn" @click="openCustomForm()"
+                      x-text="(p.lang==='en' ? '+ Add custom parent item to this tab' : '+ 이 탭에 사용자 정의 부모 항목 추가')"></button>
+            </template>
+            <template x-if="customParentForm._open">
+              <div style="display: grid; gap: 6px; padding: 6px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
+                  <input type="text" x-model="customParentForm.name_ko"
+                         placeholder="이름 (KO)" style="padding: 4px 6px; font-size: 12px; border: 1px solid var(--border); border-radius: 3px;">
+                  <input type="text" x-model="customParentForm.name_en"
+                         placeholder="Name (EN)" style="padding: 4px 6px; font-size: 12px; border: 1px solid var(--border); border-radius: 3px;">
+                </div>
+                <select x-model="customParentForm.applyTo" @change="onCustomApplyToChange()"
+                        style="padding: 4px 6px; font-size: 12px; border: 1px solid var(--border); border-radius: 3px;">
+                  <template x-for="opt in customApplyToOptions(costEditorTab)" :key="opt.applyTo">
+                    <option :value="opt.applyTo" x-text="opt['label_' + (p.lang||'ko')]"></option>
+                  </template>
+                </select>
+                <div style="display: flex; gap: 6px;">
+                  <button class="primary" @click="addCustomParent()"
+                          style="flex: 1; padding: 6px; font-size: 12px; border: 1px solid var(--accent); background: var(--accent); color: white; border-radius: 3px; cursor: pointer;"
+                          x-text="p.lang==='en' ? 'Create' : '생성'"></button>
+                  <button @click="customParentForm._open = false"
+                          style="padding: 6px 12px; font-size: 12px; border: 1px solid var(--border); background: var(--panel); border-radius: 3px; cursor: pointer;"
+                          x-text="p.lang==='en' ? 'Cancel' : '취소'"></button>
+                </div>
+              </div>
+            </template>
+          </div>
+
           <template x-for="key in itemsForTab(costEditorTab)" :key="key">
             <div class="cost-item" :class="{active: breakdownActive(key)}">
               <div class="cost-item-header" :class="{collapsed: !breakdownActive(key)}">
                 <div>
-                  <span class="cost-item-title" x-text="bdParentLabel(key)"></span>
+                  <template x-if="!isCustom(key)">
+                    <span class="cost-item-title" x-text="bdParentLabel(key)"></span>
+                  </template>
+                  <template x-if="isCustom(key)">
+                    <span class="cost-item-title" style="color: var(--accent);">
+                      <span style="font-size: 9px; padding: 1px 4px; background: var(--accent); color: white; border-radius: 2px; margin-right: 4px;">custom</span>
+                      <input type="text" :value="bdParentLabel(key)"
+                             @input="breakdowns[key]['name_' + (p.lang||'ko')] = $event.target.value; updateCustomParentName(key)"
+                             style="border: none; background: transparent; font-weight: 600; font-size: 13px; color: var(--accent); width: 180px;">
+                    </span>
+                  </template>
                   <span class="unit-hint" x-text="'(' + bdDef(key).parentUnit + ')'"></span>
                   <span class="cost-item-status" :class="breakdownActive(key) ? 'on' : 'off'"
                         x-text="breakdownActive(key) ? t('costBreakdownActive') : t('costNoBreakdown')"></span>
                 </div>
                 <div class="cost-item-actions">
-                  <template x-if="!breakdownActive(key)">
+                  <template x-if="!isCustom(key) && !breakdownActive(key)">
                     <button class="primary" @click="toggleBreakdown(key)" x-text="t('costEnableBreakdown')"></button>
                   </template>
-                  <template x-if="breakdownActive(key)">
+                  <template x-if="!isCustom(key) && breakdownActive(key)">
                     <button @click="toggleBreakdown(key)" x-text="t('costDisableBreakdown')"></button>
                   </template>
-                  <template x-if="breakdowns[key]">
+                  <template x-if="!isCustom(key) && breakdowns[key]">
                     <button class="danger" @click="resetBreakdown(key)" x-text="t('costReset')"></button>
+                  </template>
+                  <template x-if="isCustom(key)">
+                    <button class="danger" @click="removeCustomParent(key)"
+                            x-text="p.lang==='en' ? 'Delete' : '삭제'"></button>
                   </template>
                 </div>
               </div>
@@ -924,10 +990,16 @@
                   </template>
                   <button class="cost-add-btn" @click="addSubItem(key)" x-text="t('costAddItem')"></button>
                   <div class="cost-sum-bar">
-                    <span>
-                      <span class="sum-label" x-text="t('costParentValue') + ': '"></span>
-                      <span x-text="p[key].toLocaleString() + ' ' + bdDef(key).parentUnit"></span>
-                    </span>
+                    <template x-if="!isCustom(key)">
+                      <span>
+                        <span class="sum-label" x-text="t('costParentValue') + ': '"></span>
+                        <span x-text="p[key].toLocaleString() + ' ' + bdDef(key).parentUnit"></span>
+                      </span>
+                    </template>
+                    <template x-if="isCustom(key)">
+                      <span style="font-size: 11px; color: var(--muted);"
+                            x-text="p.lang==='en' ? 'applyTo: ' + breakdowns[key].applyTo : '적용 대상: ' + breakdowns[key].applyTo"></span>
+                    </template>
                     <span>
                       <span class="sum-label" x-text="t('costSum') + ': '"></span>
                       <span class="sum-value" x-text="breakdownSum(key).toLocaleString() + ' ' + bdDef(key).parentUnit"></span>
@@ -937,10 +1009,21 @@
               </template>
             </div>
           </template>
+            </div>
+          </template>
         </div>
-        <div class="modal-footer">
-          <div style="font-size: 11px; color: var(--muted);" x-text="'💾 ' + (p.lang==='ko' ? '변경 시 자동 저장 (localStorage)' : 'Auto-saved to localStorage on every edit')"></div>
-          <div class="btn-group">
+        <div class="modal-footer" style="flex-wrap: wrap; gap: 6px;">
+          <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">
+            <span style="font-size: 11px; color: var(--muted);" x-text="(p.lang==='en' ? '📦 Preset:' : '📦 프리셋:')"></span>
+            <select @change="if ($event.target.value) { applyBreakdownPreset($event.target.value); $event.target.value=''; }"
+                    style="padding: 4px 6px; font-size: 11px; border: 1px solid var(--border); border-radius: 3px; max-width: 280px;">
+              <option value="" x-text="p.lang==='en' ? '— Select preset —' : '— 프리셋 선택 —'"></option>
+              <template x-for="bp in bdPresets" :key="bp.id">
+                <option :value="bp.id" x-text="bp['name_' + (p.lang||'ko')]"></option>
+              </template>
+            </select>
+          </div>
+          <div class="btn-group" style="margin-left: auto;">
             <button @click="exportBreakdowns()" x-text="'⬇ ' + t('costExport')"></button>
             <label class="primary" style="padding: 6px 14px; border: 1px solid var(--accent); background: var(--accent); color: white; cursor: pointer; border-radius: 4px; font-size: 12px;">
               <span x-text="'⬆ ' + t('costImport')"></span>
@@ -1094,6 +1177,9 @@ const TRANSLATIONS = {
     costTabPv: '태양광 PV',
     costTabEtc: '태양열 ETC',
     costTabOpex: '운영비 단가',
+    costTabTornado: '민감도 토네이도',
+    costTornadoDesc: '활성화된 sub-item을 ±20% 변동 시 NPV(스케일 100MWh, IsoTES+그리드 기준) 영향도. 막대가 클수록 그 항목이 결과에 더 큰 영향.',
+    costTornadoNoData: '활성화된 분해 항목이 없습니다. 다른 탭에서 분해를 시작한 후 다시 오세요.',
     costEnableBreakdown: '분해 시작',
     costDisableBreakdown: '분해 비활성',
     costAddItem: '+ 항목 추가',
@@ -1210,6 +1296,9 @@ const TRANSLATIONS = {
     costTabPv: 'Solar PV',
     costTabEtc: 'Solar ETC',
     costTabOpex: 'OPEX rates',
+    costTabTornado: 'Sensitivity tornado',
+    costTornadoDesc: 'NPV impact (scale 100MWh, IsoTES+Grid baseline) when each active sub-item is varied ±20%. Larger bars = bigger leverage on outcome.',
+    costTornadoNoData: 'No active breakdowns. Enable breakdown in another tab and return.',
     costEnableBreakdown: 'Start breakdown',
     costDisableBreakdown: 'Disable breakdown',
     costAddItem: '+ Add item',
@@ -1252,8 +1341,22 @@ function effectiveValue(p, bd, key) {
   return p[key];
 }
 
+// 사용자 정의 부모 항목의 applyTo별 합계 (lump-sum extras)
+function customSum(bd, applyTo) {
+  if (!bd) return 0;
+  let s = 0;
+  for (const key in bd) {
+    const b = bd[key];
+    if (b && b.custom && b.enabled && b.applyTo === applyTo && b.items) {
+      s += b.items.reduce((acc, it) => acc + _itemValue(it), 0);
+    }
+  }
+  return s;
+}
+
 function compute(p, bd) {
   const eff = (k) => effectiveValue(p, bd, k);
+  const cx  = (a) => customSum(bd, a);
   const fx = p.ccy === 'USD' ? 1 : p.ccy === 'MNT' ? p.fx_usd_mnt : p.fx_usd_krw;
   const scale = p.mode === 'scale' ? (p.target_cap / 1.5) : 1.0;
 
@@ -1266,26 +1369,28 @@ function compute(p, bd) {
   const coalHigh_mnt = eff('coal_high_mnt') * p.coal_price_mult;
   const coalFuelUsd  = coalTonYr * (coalLow_mnt + coalHigh_mnt) / 2 / p.fx_usd_mnt;
   const transportUsd = eff('transport_usd') * p.trips_yr * scale;
-  const coalMaintUsd = eff('coal_only') * 0.04 * scale;
-  const coalAnnUsd   = coalFuelUsd + transportUsd + coalMaintUsd;
+  const coalMaintUsd = eff('coal_only') * eff('opex_pct_coal') * scale;
+  // 사용자 정의 부모 항목: 운영비 lump-sum 추가
+  const coalAnnUsd   = coalFuelUsd + transportUsd + coalMaintUsd + cx('coal_opex');
 
-  const capexCoalUsd = (eff('common_infra') + eff('coal_only')) * Math.pow(scale, p.scale_exp);
-  const capexIsotesBaseUsd = (eff('capex_system_krw') + eff('capex_logistics_krw') + eff('capex_install_krw')) / p.fx_usd_krw;
+  // CAPEX: 사용자 정의 부모 항목 추가 (각각 적절한 단위)
+  const capexCoalUsd = (eff('common_infra') + eff('coal_only') + cx('coal_capex_addon')) * Math.pow(scale, p.scale_exp);
+  const capexIsotesBaseUsd = (eff('capex_system_krw') + eff('capex_logistics_krw') + eff('capex_install_krw') + cx('isotes_capex_krw')) / p.fx_usd_krw;
   const capexIsotesUsd = capexIsotesBaseUsd * Math.pow(scale, p.scale_exp);
 
   const pvKwp = (p.daily_mj / 3.6) / p.elec_eff / p.solar_irrad * scale;
-  const capexPvAddUsd = pvKwp * 1000 * (eff('pv_module') + eff('pv_inverter') + eff('pv_install'));
+  const capexPvAddUsd = pvKwp * 1000 * (eff('pv_module') + eff('pv_inverter') + eff('pv_install')) + cx('pv_capex_addon');
   const capexPvUsd = capexIsotesUsd + capexPvAddUsd;
 
   const etcM2 = (p.daily_mj / 3.6) / p.elec_eff / p.solar_irrad / p.etc_eff * scale;
-  const capexEtcAddUsd = etcM2 * (eff('etc_tube') + eff('etc_mount') + eff('etc_circuit'));
+  const capexEtcAddUsd = etcM2 * (eff('etc_tube') + eff('etc_mount') + eff('etc_circuit')) + cx('etc_capex_addon');
   const capexEtcUsd = capexIsotesUsd + capexEtcAddUsd;
 
   const elecRateDisc = eff('night_rate_mnt') * (1 - p.night_disc) / p.fx_usd_mnt;
   const elecRateFull = eff('night_rate_mnt') / p.fx_usd_mnt;
-  const isotesAnnUsd = elecKwhYr * elecRateDisc + capexIsotesUsd * p.opex_pct;
-  const pvAnnUsd  = elecKwhYr * (1 - p.pv_cover)  * elecRateFull + capexPvUsd  * p.opex_pct;
-  const etcAnnUsd = elecKwhYr * (1 - p.etc_cover) * elecRateFull + capexEtcUsd * p.opex_pct;
+  const isotesAnnUsd = elecKwhYr * elecRateDisc + capexIsotesUsd * eff('opex_pct_isotes') + cx('isotes_opex');
+  const pvAnnUsd  = elecKwhYr * (1 - p.pv_cover)  * elecRateFull + capexPvUsd  * eff('opex_pct_pv')  + cx('pv_opex');
+  const etcAnnUsd = elecKwhYr * (1 - p.etc_cover) * elecRateFull + capexEtcUsd * eff('opex_pct_etc') + cx('etc_opex');
 
   const coalCo2 = coalTonYr * 2.36;
   const gridCo2 = elecKwhYr * p.grid_co2 / 1000;
@@ -1364,8 +1469,14 @@ const PARAM_DEFS = {
                      unit: 'USD/trip', min: 100, max: 800, step: 20, default: 360, cell: 'B22', tier: 2 },
   lifetime:        { label_ko: '시스템 수명', label_en: 'System lifetime',
                      unit: 'yr', min: 10, max: 25, step: 1, default: 15, cell: 'B36', tier: 2 },
-  opex_pct:        { label_ko: '연 유지보수', label_en: 'Annual O&M',
-                     unit: '% of CAPEX', min: 0.005, max: 0.05, step: 0.005, default: 0.02, cell: 'B38', tier: 2 },
+  opex_pct_coal:   { label_ko: '갈탄 보일러 유지보수', label_en: 'Coal boiler O&M',
+                     unit: '% of CAPEX', min: 0.005, max: 0.10, step: 0.005, default: 0.04, cell: 'B38a', tier: 2 },
+  opex_pct_isotes: { label_ko: 'IsoTES 유지보수', label_en: 'IsoTES O&M',
+                     unit: '% of CAPEX', min: 0.005, max: 0.05, step: 0.005, default: 0.02, cell: 'B38b', tier: 2 },
+  opex_pct_pv:     { label_ko: 'PV 시스템 유지보수', label_en: 'PV system O&M',
+                     unit: '% of CAPEX', min: 0.005, max: 0.05, step: 0.005, default: 0.02, cell: 'B38c', tier: 2 },
+  opex_pct_etc:    { label_ko: 'ETC 시스템 유지보수', label_en: 'ETC system O&M',
+                     unit: '% of CAPEX', min: 0.005, max: 0.05, step: 0.005, default: 0.02, cell: 'B38d', tier: 2 },
   solar_irrad:     { label_ko: '일조량', label_en: 'Solar irradiation',
                      unit: 'kWh/m²/day', min: 3.0, max: 5.5, step: 0.1, default: 4.0, cell: 'B53', tier: 2 },
   pv_cover:        { label_ko: 'PV 커버율', label_en: 'PV coverage',
@@ -1598,7 +1709,136 @@ const BREAKDOWN_DEFS = {
       { name_ko: '송배전 비용', name_en: 'Transmission & distribution' },
       { name_ko: '세금·부과금', name_en: 'Tax & surcharge' },
     ]},
+  opex_pct_coal: { tab: 'opex', parentUnit: '% of CAPEX',
+    parentLabel_ko: '갈탄 보일러 유지보수율', parentLabel_en: 'Coal boiler O&M rate',
+    suggestedItems: [
+      { name_ko: '부품 교체 (5~10년 주기)', name_en: 'Parts replacement (5-10y)' },
+      { name_ko: '정기 점검', name_en: 'Periodic inspection' },
+      { name_ko: '청소·재 처리', name_en: 'Cleaning & ash handling' },
+      { name_ko: '운전원 인건비 비례', name_en: 'Operator labor (pro-rata)' },
+    ]},
+  opex_pct_isotes: { tab: 'opex', parentUnit: '% of CAPEX',
+    parentLabel_ko: 'IsoTES 유지보수율', parentLabel_en: 'IsoTES O&M rate',
+    suggestedItems: [
+      { name_ko: '전열 히터 교체 (10년 주기)', name_en: 'Electric heater replacement (10y)' },
+      { name_ko: '단열 점검·보수', name_en: 'Insulation check & repair' },
+      { name_ko: '제어 시스템 정비', name_en: 'Control system maintenance' },
+    ]},
+  opex_pct_pv: { tab: 'opex', parentUnit: '% of CAPEX',
+    parentLabel_ko: 'PV 유지보수율', parentLabel_en: 'PV O&M rate',
+    suggestedItems: [
+      { name_ko: '패널 청소 (몽골 황사)', name_en: 'Panel cleaning (Mongolia dust)' },
+      { name_ko: '인버터 교체 (15년 주기)', name_en: 'Inverter replacement (15y)' },
+      { name_ko: '케이블·접지 점검', name_en: 'Cable & grounding inspection' },
+    ]},
+  opex_pct_etc: { tab: 'opex', parentUnit: '% of CAPEX',
+    parentLabel_ko: 'ETC 유지보수율', parentLabel_en: 'ETC O&M rate',
+    suggestedItems: [
+      { name_ko: '집열기 청소', name_en: 'Collector cleaning' },
+      { name_ko: '부동액 교체 (5년 주기)', name_en: 'Antifreeze replacement (5y)' },
+      { name_ko: '순환펌프 정비', name_en: 'Pump maintenance' },
+    ]},
 };
+
+// ============================================================
+// Breakdown preset library — apply with one click
+// ============================================================
+const BREAKDOWN_PRESETS = [
+  {
+    id: 'reset',
+    name_ko: '🚫 전체 초기화 (분해 없음)',
+    name_en: '🚫 Reset all (no breakdown)',
+    desc_ko: '모든 분해와 커스텀 항목을 제거하고 슬라이더 기본값으로',
+    desc_en: 'Remove all breakdowns and custom items; back to default sliders',
+    apply: () => ({}),  // empty breakdowns object
+  },
+  {
+    id: 'suggested_all',
+    name_ko: '✨ 권장 분해 (전체 15개 항목)',
+    name_en: '✨ Suggested breakdown (all 15 items)',
+    desc_ko: 'BREAKDOWN_DEFS의 권장 sub-items로 모든 항목 분해 (현재 슬라이더 값 균등 분배)',
+    desc_en: 'Apply suggested sub-items to all 15 items (current slider values, equal split)',
+    apply: (p) => {
+      const bd = {};
+      for (const key in BREAKDOWN_DEFS) {
+        const def = BREAKDOWN_DEFS[key];
+        const parentVal = p[key];
+        const n = def.suggestedItems.length;
+        const each = parentVal / n;
+        bd[key] = {
+          enabled: true,
+          items: def.suggestedItems.map(s => ({
+            name_ko: s.name_ko, name_en: s.name_en,
+            mode: 'simple', value: each,
+            unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
+          })),
+        };
+      }
+      return bd;
+    },
+  },
+  {
+    id: 'isotes_only',
+    name_ko: '🔧 IsoTES CAPEX 3항목만 분해',
+    name_en: '🔧 IsoTES CAPEX (3 items) only',
+    desc_ko: 'B29·B30·B31만 분해. PV·ETC·갈탄·OPEX는 단순 값 유지',
+    desc_en: 'Only B29/B30/B31. PV/ETC/Coal/OPEX stay as simple values',
+    apply: (p) => {
+      const bd = {};
+      const keys = ['capex_system_krw', 'capex_logistics_krw', 'capex_install_krw'];
+      for (const key of keys) {
+        const def = BREAKDOWN_DEFS[key];
+        const parentVal = p[key];
+        const n = def.suggestedItems.length;
+        bd[key] = {
+          enabled: true,
+          items: def.suggestedItems.map(s => ({
+            name_ko: s.name_ko, name_en: s.name_en,
+            mode: 'simple', value: parentVal / n,
+            unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
+          })),
+        };
+      }
+      return bd;
+    },
+  },
+  {
+    id: 'opex_per_tech',
+    name_ko: '⚙️ 기술별 유지보수율 분해',
+    name_en: '⚙️ Per-tech O&M decomposition',
+    desc_ko: 'opex_pct_coal/isotes/pv/etc 4개를 기술별 sub-item으로 분해 (정기점검·부품 등)',
+    desc_en: 'Decompose 4 per-tech O&M rates into sub-items (inspection, parts, etc.)',
+    apply: (p) => {
+      const bd = {};
+      const keys = ['opex_pct_coal', 'opex_pct_isotes', 'opex_pct_pv', 'opex_pct_etc'];
+      for (const key of keys) {
+        const def = BREAKDOWN_DEFS[key];
+        const parentVal = p[key];
+        const n = def.suggestedItems.length;
+        bd[key] = {
+          enabled: true,
+          items: def.suggestedItems.map(s => ({
+            name_ko: s.name_ko, name_en: s.name_en,
+            mode: 'simple', value: parentVal / n,
+            unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
+          })),
+        };
+      }
+      return bd;
+    },
+  },
+  {
+    id: 'seed2_template',
+    name_ko: '🌱 Seed 2 BOM 템플릿 (placeholder)',
+    name_en: '🌱 Seed 2 BOM template (placeholder)',
+    desc_ko: '향후 Seed 2 사업 실 BOM 확보 시 사내에서 채워질 템플릿. 현재는 권장 분해와 동일',
+    desc_en: 'Placeholder for actual Seed 2 BOM data. Currently same as suggested breakdown',
+    apply: (p) => {
+      // 현재는 suggested_all과 동일. 향후 사내 BOM 데이터로 채워짐
+      return BREAKDOWN_PRESETS.find(p2 => p2.id === 'suggested_all').apply(p);
+    },
+  },
+];
 
 // ============================================================
 // Tutorial content (bilingual, HTML strings)
@@ -1771,12 +2011,26 @@ const TUTORIAL_KO = [
      <li>탄소가격(B39) 기본 $50/tCO₂ — VCM은 $5~15, SCC는 $50~150 권장</li>
    </ul>
 
+   <h3>🛠️ 비용 편집기 사용법 (v2.1 신규)</h3>
+   <p>이제 헤더의 <strong>🛠️ 비용 편집</strong> 버튼으로 위 항목들을 bottom-up으로 세분화할 수 있습니다.</p>
+   <ol>
+     <li><strong>탭 선택</strong>: 공통 / IsoTES / 태양광 PV / 태양열 ETC / 운영비 단가 / 민감도 토네이도</li>
+     <li><strong>"분해 시작" 클릭</strong>: 권장 sub-items 자동 채워짐 (현재 슬라이더 값 균등 분배)</li>
+     <li><strong>각 sub-item</strong>: 단순 값 또는 <strong>"단가×수량"</strong> 모드 (예: 압력탱크 = 600만 KRW/톤 × 10톤 = 6,000만 KRW)</li>
+     <li><strong>항목 추가/삭제</strong>: 모든 sub-item 자유 조정. 합계가 자동 계산되어 CAPEX/OPEX/NPV에 즉시 반영</li>
+     <li><strong>+ 새 부모 항목</strong>: 기존 15개 외에 사용자 정의 항목 추가 (예: "보조금 차감", "특정 인허가비"). applyTo로 어느 기술의 어떤 비용에 추가할지 지정</li>
+     <li><strong>📦 프리셋</strong>: 한 번 클릭으로 전체 분해 적용/초기화. "권장 분해", "IsoTES만", "기술별 OPEX", "Seed 2 BOM 템플릿" 등</li>
+     <li><strong>민감도 토네이도</strong>: 활성화된 sub-item 중 어느 것이 NPV에 가장 큰 영향을 미치는지 한 눈에. ±20% 변동 시 ΔNPV를 막대로 표시</li>
+   </ol>
+   <div class="tip">💡 <strong>분해 활성 시 좌측 슬라이더 자동 숨김</strong> — 합계가 우선. 슬라이더 라벨 옆 "🛠️ 편집기에서 관리 중" 핀을 클릭하면 편집기 재오픈</div>
+   <div class="tip">💾 모든 분해 정의는 <strong>localStorage에 자동 저장</strong> (사용자별 격리). JSON으로 내보내기/가져오기 가능 — 사내 공유 시 활용</div>
+
    <h3>세분화 우선순위 (정확도 향상)</h3>
    <p>신뢰도가 낮은 항목부터 세분화하면 모델 정확도 향상이 큽니다:</p>
    <ol>
      <li><strong>몽골 현지 설치비 (B31)</strong> — 정확도 가장 낮음. Seed 2 사업 실 BOM 확보 후 5분류 권장 (압력탱크/기초/인건비/시운전/모니터링)</li>
-     <li><strong>갈탄 운송비</strong> — 트럭 임차·인건비·연료 분리 시 유가 변동 시나리오 가능</li>
-     <li><strong>유지보수 일률 2%</strong> — 기술별·부품별 차등 적용 (PV 청소 빈도 ↑, ETC 순환액 5년 주기, IsoTES 히터 10년 등)</li>
+     <li><strong>갈탄 운송비 (B22)</strong> — 트럭 임차·인건비·연료 분리 시 유가 변동 시나리오 가능</li>
+     <li><strong>기술별 유지보수율 (B38a-d)</strong> — 이제 4개 기술 각각 분해 가능 (갈탄 4%, 그 외 2% 기본). PV 청소 빈도, ETC 순환액 5년 주기, IsoTES 히터 10년 등으로 세분화</li>
      <li><strong>PV/ETC 커버율</strong> — 월별 일조량 데이터 도입으로 정밀도 향상</li>
      <li><strong>갈탄 단가</strong> — 계절·연도 변동 모델링 (현재는 저·고 평균만)</li>
    </ol>
@@ -2028,12 +2282,26 @@ const TUTORIAL_EN = [
      <li>Carbon price (B39) default $50/tCO₂ — VCM is $5-15, SCC is $50-150 recommended</li>
    </ul>
 
+   <h3>🛠️ Cost Editor usage (v2.1 new)</h3>
+   <p>The header <strong>🛠️ Cost Editor</strong> button now lets you bottom-up decompose any of these items.</p>
+   <ol>
+     <li><strong>Select tab</strong>: Common / IsoTES / Solar PV / Solar ETC / OPEX rates / Sensitivity Tornado</li>
+     <li><strong>Click "Start breakdown"</strong>: suggested sub-items auto-fill (current slider value split equally)</li>
+     <li><strong>Each sub-item</strong>: choose simple value or <strong>"Unit × Qty"</strong> mode (e.g., pressure tank = 6M KRW/ton × 10 tons = 60M KRW)</li>
+     <li><strong>Add/remove items</strong>: freely adjust. Sum auto-flows into CAPEX/OPEX/NPV in real-time</li>
+     <li><strong>+ Add custom parent item</strong>: beyond the 15 built-in items. Specify applyTo (which tech's cost line to add)</li>
+     <li><strong>📦 Preset library</strong>: one-click apply/reset. "Suggested breakdown", "IsoTES only", "Per-tech OPEX", "Seed 2 BOM template", etc.</li>
+     <li><strong>Sensitivity Tornado</strong>: visualize which active sub-item has the biggest NPV leverage. ±20% variation shown as ΔNPV bars</li>
+   </ol>
+   <div class="tip">💡 <strong>Sliders auto-hide when breakdown is active</strong> — sum takes precedence. Click the "🛠️ Managed in editor" pill next to the slider label to re-open the editor</div>
+   <div class="tip">💾 All breakdowns are <strong>auto-saved to localStorage</strong> (per-user isolation). JSON export/import for sharing within team</div>
+
    <h3>Decomposition priority (accuracy improvement)</h3>
    <p>Decomposing low-confidence items first yields the biggest accuracy gains:</p>
    <ol>
      <li><strong>Mongolia install B31</strong> — lowest accuracy. Decompose into 5 categories after Seed 2 BOM (pressure tank / foundation / labor / commissioning / monitoring)</li>
-     <li><strong>Coal transport</strong> — separate truck rental / labor / fuel for fuel-price scenarios</li>
-     <li><strong>Uniform 2% maintenance</strong> — apply per-tech and per-component rates (PV cleaning frequency ↑, ETC antifreeze 5y, IsoTES heater 10y, etc.)</li>
+     <li><strong>Coal transport (B22)</strong> — separate truck rental / labor / fuel for fuel-price scenarios</li>
+     <li><strong>Per-tech O&M rates (B38a-d)</strong> — now 4 separate rates per tech (Coal 4%, others 2% default). Decompose into PV cleaning frequency, ETC antifreeze 5y, IsoTES heater 10y, etc.</li>
      <li><strong>PV/ETC coverage</strong> — refine with monthly irradiation data</li>
      <li><strong>Coal price</strong> — model seasonal/yearly variation (currently low/high average only)</li>
    </ol>
@@ -2282,13 +2550,109 @@ function simulator() {
         : (it.value || 0)), 0);
     },
     itemsForTab(tabId) {
-      return Object.keys(BREAKDOWN_DEFS).filter(k => BREAKDOWN_DEFS[k].tab === tabId);
+      // 내장 항목 + 해당 탭의 커스텀 항목
+      const builtin = Object.keys(BREAKDOWN_DEFS).filter(k => BREAKDOWN_DEFS[k].tab === tabId);
+      const custom = Object.keys(this.breakdowns).filter(k =>
+        k.startsWith('__custom_') && this.breakdowns[k].tab === tabId
+      );
+      return [...builtin, ...custom];
     },
-    bdDef(key) { return BREAKDOWN_DEFS[key]; },
+    isCustom(key) { return key.startsWith('__custom_'); },
+    bdDef(key) {
+      if (this.isCustom(key)) {
+        const b = this.breakdowns[key];
+        return { tab: b.tab, parentUnit: b.unit, parentLabel_ko: b.name_ko, parentLabel_en: b.name_en };
+      }
+      return BREAKDOWN_DEFS[key];
+    },
     bdParentLabel(key) {
-      const def = BREAKDOWN_DEFS[key];
+      const def = this.bdDef(key);
       const lang = this.p.lang || 'ko';
       return def['parentLabel_' + lang] || def.parentLabel_ko;
+    },
+
+    // === 사용자 정의 부모 항목 ===
+    customParentForm: { name_ko: '', name_en: '', applyTo: '', unit: '', _open: false },
+    customApplyToOptions(tab) {
+      // 탭별 가능한 applyTo (target) 옵션 + 권장 단위
+      const all = {
+        common: [
+          { applyTo: 'coal_capex_addon', unit: 'USD', label_ko: '갈탄 CAPEX 추가 (USD)', label_en: 'Add to Coal CAPEX (USD)' },
+        ],
+        isotes: [
+          { applyTo: 'isotes_capex_krw', unit: 'KRW', label_ko: 'IsoTES CAPEX 추가 (KRW)', label_en: 'Add to IsoTES CAPEX (KRW)' },
+          { applyTo: 'isotes_opex', unit: 'USD/yr', label_ko: 'IsoTES 운영비 추가 (USD/yr)', label_en: 'Add to IsoTES OPEX (USD/yr)' },
+        ],
+        pv: [
+          { applyTo: 'pv_capex_addon', unit: 'USD', label_ko: 'PV CAPEX 추가 (USD)', label_en: 'Add to PV CAPEX (USD)' },
+          { applyTo: 'pv_opex', unit: 'USD/yr', label_ko: 'PV 운영비 추가 (USD/yr)', label_en: 'Add to PV OPEX (USD/yr)' },
+        ],
+        etc: [
+          { applyTo: 'etc_capex_addon', unit: 'USD', label_ko: 'ETC CAPEX 추가 (USD)', label_en: 'Add to ETC CAPEX (USD)' },
+          { applyTo: 'etc_opex', unit: 'USD/yr', label_ko: 'ETC 운영비 추가 (USD/yr)', label_en: 'Add to ETC OPEX (USD/yr)' },
+        ],
+        opex: [
+          { applyTo: 'coal_opex', unit: 'USD/yr', label_ko: '갈탄 운영비 추가 (USD/yr)', label_en: 'Add to Coal OPEX (USD/yr)' },
+          { applyTo: 'isotes_opex', unit: 'USD/yr', label_ko: 'IsoTES 운영비 추가 (USD/yr)', label_en: 'Add to IsoTES OPEX (USD/yr)' },
+          { applyTo: 'pv_opex', unit: 'USD/yr', label_ko: 'PV 운영비 추가 (USD/yr)', label_en: 'Add to PV OPEX (USD/yr)' },
+          { applyTo: 'etc_opex', unit: 'USD/yr', label_ko: 'ETC 운영비 추가 (USD/yr)', label_en: 'Add to ETC OPEX (USD/yr)' },
+        ],
+      };
+      return all[tab] || [];
+    },
+    openCustomForm() {
+      const opts = this.customApplyToOptions(this.costEditorTab);
+      this.customParentForm = {
+        name_ko: '', name_en: '',
+        applyTo: opts[0]?.applyTo || '',
+        unit: opts[0]?.unit || '',
+        _open: true,
+      };
+    },
+    onCustomApplyToChange() {
+      const opts = this.customApplyToOptions(this.costEditorTab);
+      const sel = opts.find(o => o.applyTo === this.customParentForm.applyTo);
+      if (sel) this.customParentForm.unit = sel.unit;
+    },
+    addCustomParent() {
+      const f = this.customParentForm;
+      if (!f.name_ko && !f.name_en) {
+        alert(this.p.lang === 'en' ? 'Name required' : '이름 입력 필요');
+        return;
+      }
+      if (!f.applyTo) {
+        alert(this.p.lang === 'en' ? 'applyTo required' : '적용 대상 선택 필요');
+        return;
+      }
+      const id = '__custom_' + Date.now();
+      this.breakdowns[id] = {
+        custom: true,
+        enabled: true,
+        applyTo: f.applyTo,
+        unit: f.unit,
+        tab: this.costEditorTab,
+        name_ko: f.name_ko || f.name_en,
+        name_en: f.name_en || f.name_ko,
+        items: [{
+          name_ko: '항목 1', name_en: 'Item 1',
+          mode: 'simple', value: 0,
+          unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
+        }],
+      };
+      this.customParentForm._open = false;
+      this.saveBreakdowns();
+      this.recompute();
+    },
+    removeCustomParent(key) {
+      if (!this.isCustom(key)) return;
+      if (!confirm(this.p.lang === 'en' ? 'Delete this custom item?' : '이 사용자 정의 항목을 삭제할까요?')) return;
+      delete this.breakdowns[key];
+      this.saveBreakdowns();
+      this.recompute();
+    },
+    updateCustomParentName(key) {
+      // input의 x-model 자동 갱신, 호출 시점에 저장
+      this.saveBreakdowns();
     },
     bdItemName(item) {
       const lang = this.p.lang || 'ko';
@@ -2401,6 +2765,102 @@ function simulator() {
         const raw = localStorage.getItem('gigaette_heatingsim_v2_breakdowns');
         if (raw) this.breakdowns = JSON.parse(raw) || {};
       } catch (e) { this.breakdowns = {}; }
+    },
+
+    bdPresets: BREAKDOWN_PRESETS,
+    tornadoChart: null,
+
+    // 토네이도 데이터 계산: 활성 sub-item별 ±20% 변동 시 NPV 영향
+    computeTornado() {
+      const rows = [];
+      // 기준: 스케일 100MWh, IsoTES+그리드, 기본 가정
+      const baseP = { ...this.p, mode: 'scale', target_cap: 100 };
+      const baseBd = JSON.parse(JSON.stringify(this.breakdowns));
+      const baseR = compute(baseP, baseBd);
+      const baseNpv = baseR.npv.isotes;
+
+      const variance = 0.20; // ±20%
+
+      for (const parentKey in this.breakdowns) {
+        const b = this.breakdowns[parentKey];
+        if (!b || !b.enabled || !b.items || b.items.length === 0) continue;
+        const parentLabel = this.bdParentLabel(parentKey);
+
+        for (let i = 0; i < b.items.length; i++) {
+          const item = b.items[i];
+          const itemName = this.bdItemName(item) || ('Item ' + (i + 1));
+          const itemVal = item.mode === 'formula' ? (item.unitCost || 0) * (item.quantity || 0) : (item.value || 0);
+          if (!itemVal) continue;
+
+          // up: +20%, down: -20% (deep clone breakdowns and modify one item)
+          const bdUp = JSON.parse(JSON.stringify(this.breakdowns));
+          const bdDn = JSON.parse(JSON.stringify(this.breakdowns));
+          if (item.mode === 'formula') {
+            bdUp[parentKey].items[i].unitCost = (item.unitCost || 0) * (1 + variance);
+            bdDn[parentKey].items[i].unitCost = (item.unitCost || 0) * (1 - variance);
+          } else {
+            bdUp[parentKey].items[i].value = itemVal * (1 + variance);
+            bdDn[parentKey].items[i].value = itemVal * (1 - variance);
+          }
+          const npvUp = compute(baseP, bdUp).npv.isotes;
+          const npvDn = compute(baseP, bdDn).npv.isotes;
+
+          rows.push({
+            label: parentLabel + ' → ' + itemName,
+            low: npvDn - baseNpv,    // typically negative when item is a cost (lower cost → higher NPV)
+            high: npvUp - baseNpv,    // typically negative effect (higher cost → lower NPV)
+            range: Math.abs(npvUp - npvDn),
+          });
+        }
+      }
+      // sort by range desc
+      rows.sort((a, b) => b.range - a.range);
+      return rows.slice(0, 20);  // top 20 to keep readable
+    },
+
+    renderTornado() {
+      this.$nextTick(() => {
+        const canvas = document.getElementById('tornadoChart');
+        if (!canvas) return;
+        const data = this.computeTornado();
+        if (this.tornadoChart) { try { this.tornadoChart.destroy(); } catch (e) {} this.tornadoChart = null; }
+        if (data.length === 0) return;
+
+        const labels = data.map(d => d.label);
+        const lows  = data.map(d => d.low);
+        const highs = data.map(d => d.high);
+
+        this.tornadoChart = new Chart(canvas, {
+          type: 'bar',
+          data: {
+            labels,
+            datasets: [
+              { label: '-20%', data: lows,  backgroundColor: '#0072b2' },
+              { label: '+20%', data: highs, backgroundColor: '#d55e00' },
+            ]
+          },
+          options: {
+            indexAxis: 'y',
+            responsive: true, maintainAspectRatio: false,
+            animation: false,
+            scales: {
+              x: { stacked: false, title: { display: true, text: 'Δ NPV (USD)' }, ticks: { font: { size: 10 } } },
+              y: { stacked: true, ticks: { font: { size: 10 }, autoSkip: false } }
+            },
+            plugins: { legend: { position: 'top', labels: { font: { size: 10 } } } }
+          }
+        });
+      });
+    },
+    applyBreakdownPreset(presetId) {
+      const preset = BREAKDOWN_PRESETS.find(p => p.id === presetId);
+      if (!preset) return;
+      if (!confirm(this.p.lang === 'en'
+        ? 'Apply preset "' + preset.name_en + '"? Current breakdowns and custom items will be replaced.'
+        : '프리셋 "' + preset.name_ko + '"을 적용할까요? 현재 분해·커스텀 항목이 모두 대체됩니다.')) return;
+      this.breakdowns = preset.apply(this.p);
+      this.saveBreakdowns();
+      this.recompute();
     },
 
     exportBreakdowns() {
