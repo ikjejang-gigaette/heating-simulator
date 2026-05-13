@@ -188,6 +188,7 @@
     padding: 10px;
     transition: border-left-color 0.15s;
   }
+  .kpi-grid.tech-coal .kpi { border-left-color: var(--c-coal); }
   .kpi-grid.tech-pv .kpi { border-left-color: var(--c-pv); }
   .kpi-grid.tech-etc .kpi { border-left-color: var(--c-etc); }
   .kpi .kpi-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
@@ -737,26 +738,39 @@
         <span x-text="t('carbon') + ':'"></span><strong x-text="p.carbon_on ? '$'+p.carbon_price+'/tCO₂' : t('carbonOff')"></strong>
       </div>
 
-      <!-- KPI tech selector / 비교 기술 토글 -->
+      <!-- KPI tech selector / 비교 기술 토글 (갈탄 포함 4기술) -->
       <div class="kpi-tech-bar">
         <span class="label" x-text="t('kpiCompareLabel') + ':'"></span>
         <div class="toggle-group">
+          <button :class="{on: p.kpiTech==='coal'}"   @click="p.kpiTech='coal'"   x-text="t('kpiTechCoal')"></button>
           <button :class="{on: p.kpiTech==='isotes'}" @click="p.kpiTech='isotes'" x-text="t('kpiTechIsotes')"></button>
           <button :class="{on: p.kpiTech==='pv'}"     @click="p.kpiTech='pv'"     x-text="t('kpiTechPv')"></button>
           <button :class="{on: p.kpiTech==='etc'}"    @click="p.kpiTech='etc'"    x-text="t('kpiTechEtc')"></button>
         </div>
       </div>
 
-      <!-- KPI cards / KPI 카드 (선택된 기술 vs 갈탄) -->
+      <!-- Comparison baseline selector / 비교 기준 토글 -->
+      <div class="kpi-tech-bar">
+        <span class="label" x-text="t('baselineLabel') + ':'"></span>
+        <div class="toggle-group">
+          <button :class="{on: p.comparisonBaseline==='absolute'}" @click="p.comparisonBaseline='absolute'; updateCharts()" x-text="t('baselineAbsolute')"></button>
+          <button :class="{on: p.comparisonBaseline==='coal'}"     @click="p.comparisonBaseline='coal'; updateCharts()"     x-text="t('baselineCoal')"></button>
+          <button :class="{on: p.comparisonBaseline==='isotes'}"   @click="p.comparisonBaseline='isotes'; updateCharts()"   x-text="t('baselineIsotes')"></button>
+          <button :class="{on: p.comparisonBaseline==='pv'}"       @click="p.comparisonBaseline='pv'; updateCharts()"       x-text="t('baselinePv')"></button>
+          <button :class="{on: p.comparisonBaseline==='etc'}"      @click="p.comparisonBaseline='etc'; updateCharts()"      x-text="t('baselineEtc')"></button>
+        </div>
+      </div>
+
+      <!-- KPI cards / KPI 카드 (선택된 기술, baseline 토글 반영) -->
       <div class="kpi-grid" :class="'tech-' + p.kpiTech">
         <div class="kpi">
           <div class="kpi-label" x-text="kpiTechName() + ' ' + t('kpiCapex')"></div>
           <div class="kpi-value" x-text="fmt(r.capex[p.kpiTech])"></div>
-          <div class="kpi-sub" x-text="t('coalDiff') + ' +' + fmt(r.capex[p.kpiTech] - r.capex.coal)"></div>
+          <div class="kpi-sub" x-text="t('coalDiff') + ' ' + fmtSigned(r.capex[p.kpiTech] - r.capex.coal)"></div>
         </div>
-        <div class="kpi" :class="r.npv[p.kpiTech] >= 0 ? 'good' : 'bad'">
-          <div class="kpi-label" x-text="kpiTechName() + ' ' + t('kpiNpv')"></div>
-          <div class="kpi-value" x-text="fmtSigned(r.npv[p.kpiTech])"></div>
+        <div class="kpi" :class="npvForTech(p.kpiTech) >= 0 ? 'good' : 'bad'">
+          <div class="kpi-label" x-text="kpiTechName() + ' ' + t('kpiNpv') + ' · ' + baselineName()"></div>
+          <div class="kpi-value" x-text="fmtSigned(npvForTech(p.kpiTech))"></div>
           <div class="kpi-sub" x-text="t('discountRef') + ' ' + (p.discount*100).toFixed(1) + '%'"></div>
         </div>
         <div class="kpi">
@@ -764,9 +778,9 @@
           <div class="kpi-value" x-text="fmtPerMWh(r.lcoh[p.kpiTech])"></div>
           <div class="kpi-sub" x-text="t('coalLcohRef') + ' ' + fmtPerMWh(r.lcoh.coal)"></div>
         </div>
-        <div class="kpi" :class="r.payback[p.kpiTech] < p.lifetime ? 'good' : 'bad'">
-          <div class="kpi-label" x-text="kpiTechName() + ' ' + t('kpiPayback')"></div>
-          <div class="kpi-value" x-text="fmtPayback(r.payback[p.kpiTech])"></div>
+        <div class="kpi" :class="paybackForTech(p.kpiTech) < p.lifetime ? 'good' : 'bad'">
+          <div class="kpi-label" x-text="kpiTechName() + ' ' + t('kpiPayback') + ' · ' + baselineName()"></div>
+          <div class="kpi-value" x-text="fmtPayback(paybackForTech(p.kpiTech))"></div>
           <div class="kpi-sub" x-text="t('lifetimeRef') + ' ' + p.lifetime + (p.lang==='ko'?'년':' yr')"></div>
         </div>
       </div>
@@ -788,6 +802,11 @@
             <td x-text="fmt(r.capex.isotes)"></td>
             <td x-text="fmt(r.capex.pv)"></td>
             <td x-text="fmt(r.capex.etc)"></td></tr>
+          <tr><td x-text="t('rowRevenue')"></td>
+            <td x-text="fmt(r.revenue.coal)"></td>
+            <td x-text="fmt(r.revenue.isotes)"></td>
+            <td x-text="fmt(r.revenue.pv)"></td>
+            <td x-text="fmt(r.revenue.etc)"></td></tr>
           <tr><td x-text="t('rowGross')"></td>
             <td x-text="fmt(r.gross.coal)"></td>
             <td x-text="fmt(r.gross.isotes)"></td>
@@ -798,26 +817,31 @@
             <td x-text="fmt(r.credit.isotes)" :class="r.credit.isotes>0?'pos':''"></td>
             <td x-text="fmt(r.credit.pv)" :class="r.credit.pv>0?'pos':''"></td>
             <td x-text="fmt(r.credit.etc)" :class="r.credit.etc>0?'pos':''"></td></tr>
-          <tr><td><strong x-text="t('rowNet')"></strong></td>
+          <tr><td x-text="t('rowNet')"></td>
             <td x-text="fmt(r.net.coal)"></td>
             <td x-text="fmt(r.net.isotes)"></td>
             <td x-text="fmt(r.net.pv)"></td>
             <td x-text="fmt(r.net.etc)"></td></tr>
+          <tr><td><strong x-text="t('rowProfit')"></strong></td>
+            <td x-text="fmtSigned(r.profit.coal)" :class="r.profit.coal>0?'pos':'neg'"></td>
+            <td x-text="fmtSigned(r.profit.isotes)" :class="r.profit.isotes>0?'pos':'neg'"></td>
+            <td x-text="fmtSigned(r.profit.pv)" :class="r.profit.pv>0?'pos':'neg'"></td>
+            <td x-text="fmtSigned(r.profit.etc)" :class="r.profit.etc>0?'pos':'neg'"></td></tr>
           <tr><td x-text="t('rowLcoh')"></td>
             <td x-text="fmtPerMWh(r.lcoh.coal)"></td>
             <td x-text="fmtPerMWh(r.lcoh.isotes)"></td>
             <td x-text="fmtPerMWh(r.lcoh.pv)"></td>
             <td x-text="fmtPerMWh(r.lcoh.etc)"></td></tr>
-          <tr><td x-text="t('rowPayback')"></td>
-            <td>—</td>
-            <td x-text="fmtPayback(r.payback.isotes)"></td>
-            <td x-text="fmtPayback(r.payback.pv)"></td>
-            <td x-text="fmtPayback(r.payback.etc)"></td></tr>
-          <tr><td><strong x-text="t('rowNpv')"></strong></td>
-            <td>—</td>
-            <td x-text="fmtSigned(r.npv.isotes)" :class="r.npv.isotes>0?'pos':'neg'"></td>
-            <td x-text="fmtSigned(r.npv.pv)" :class="r.npv.pv>0?'pos':'neg'"></td>
-            <td x-text="fmtSigned(r.npv.etc)" :class="r.npv.etc>0?'pos':'neg'"></td></tr>
+          <tr><td x-text="paybackRowLabel()"></td>
+            <td x-text="fmtPayback(paybackForTech('coal'))"></td>
+            <td x-text="fmtPayback(paybackForTech('isotes'))"></td>
+            <td x-text="fmtPayback(paybackForTech('pv'))"></td>
+            <td x-text="fmtPayback(paybackForTech('etc'))"></td></tr>
+          <tr><td><strong x-text="npvRowLabel()"></strong></td>
+            <td x-text="fmtSigned(npvForTech('coal'))"   :class="npvForTech('coal')>0?'pos':'neg'"></td>
+            <td x-text="fmtSigned(npvForTech('isotes'))" :class="npvForTech('isotes')>0?'pos':'neg'"></td>
+            <td x-text="fmtSigned(npvForTech('pv'))"     :class="npvForTech('pv')>0?'pos':'neg'"></td>
+            <td x-text="fmtSigned(npvForTech('etc'))"    :class="npvForTech('etc')>0?'pos':'neg'"></td></tr>
           <tr><td x-text="t('rowCo2')"></td>
             <td>—</td>
             <td x-text="r.co2.isotes.toFixed(1)"></td>
@@ -841,7 +865,7 @@
           <div class="chart-canvas-wrap"><canvas id="costChart"></canvas></div>
         </div>
         <div class="chart-card">
-          <h3 x-text="t('chartCo2')"></h3>
+          <h3 x-text="t('chartPayback') + ' · ' + baselineName()"></h3>
           <div class="chart-canvas-wrap"><canvas id="co2Chart"></canvas></div>
         </div>
       </div>
@@ -910,6 +934,7 @@
           <button :class="{active: costEditorTab === 'pv'}"      @click="costEditorTab = 'pv'"      x-text="t('costTabPv')"></button>
           <button :class="{active: costEditorTab === 'etc'}"     @click="costEditorTab = 'etc'"     x-text="t('costTabEtc')"></button>
           <button :class="{active: costEditorTab === 'opex'}"    @click="costEditorTab = 'opex'"    x-text="t('costTabOpex')"></button>
+          <button :class="{active: costEditorTab === 'revenue'}" @click="costEditorTab = 'revenue'" x-text="t('costTabRevenue')"></button>
           <button :class="{active: costEditorTab === 'tornado'}" @click="costEditorTab = 'tornado'; renderTornado()" x-text="t('costTabTornado')"></button>
         </div>
         <div class="modal-body">
@@ -1219,9 +1244,25 @@ const TRANSLATIONS = {
     lifetimeRef: '시스템 수명',
     discountRef: '할인율',
     kpiCompareLabel: '비교 기술',
+    kpiTechCoal: '갈탄 보일러',
     kpiTechIsotes: '그리드+IsoTES',
     kpiTechPv: 'PV+IsoTES',
     kpiTechEtc: 'ETC+IsoTES',
+    baselineLabel: '비교 기준',
+    baselineAbsolute: '수입 대비 (절대)',
+    baselineCoal: 'vs 갈탄',
+    baselineIsotes: 'vs IsoTES',
+    baselinePv: 'vs PV',
+    baselineEtc: 'vs ETC',
+    rowRevenue: '연 매출',
+    rowProfit: '영업이익',
+    rowNpvAbs: 'NPV (15년, 절대)',
+    rowNpvRel: 'NPV (15년, 상대)',
+    rowPaybackAbs: '회수기간 (사업)',
+    rowPaybackRel: '회수기간 (상대)',
+    costTabRevenue: '수익 항목',
+    chartPayback: '회수기간 비교',
+    tabRevenue: '수익 모델',
     chartLcoh: 'LCOH 비교 (낮을수록 경제적)',
     chartNpv: 'NPV vs 갈탄 (15년 누적, 양수=갈탄보다 경제적)',
     chartCost: '연 순비용 비교',
@@ -1338,9 +1379,25 @@ const TRANSLATIONS = {
     lifetimeRef: 'System lifetime',
     discountRef: 'discount',
     kpiCompareLabel: 'Compare technology',
+    kpiTechCoal: 'Coal boiler',
     kpiTechIsotes: 'Grid+IsoTES',
     kpiTechPv: 'PV+IsoTES',
     kpiTechEtc: 'ETC+IsoTES',
+    baselineLabel: 'Baseline',
+    baselineAbsolute: 'vs Revenue (absolute)',
+    baselineCoal: 'vs Coal',
+    baselineIsotes: 'vs IsoTES',
+    baselinePv: 'vs PV',
+    baselineEtc: 'vs ETC',
+    rowRevenue: 'Annual revenue',
+    rowProfit: 'Operating profit',
+    rowNpvAbs: 'NPV (15yr, absolute)',
+    rowNpvRel: 'NPV (15yr, relative)',
+    rowPaybackAbs: 'Payback (business)',
+    rowPaybackRel: 'Payback (relative)',
+    costTabRevenue: 'Revenue items',
+    chartPayback: 'Payback comparison',
+    tabRevenue: 'Revenue Model',
     chartLcoh: 'LCOH Comparison (lower = more economic)',
     chartNpv: 'NPV vs Coal (15yr cumulative, positive = beats coal)',
     chartCost: 'Annual Net Cost Comparison',
@@ -1498,8 +1555,24 @@ function compute(p, bd) {
   const netPv     = pvAnnUsd     - creditPv;
   const netEtc    = etcAnnUsd    - creditEtc;
 
-  const r = p.discount, n = p.lifetime;
-  const PVF = (1 - Math.pow(1 + r, -n)) / r;
+  const rr = p.discount, n = p.lifetime;
+  const PVF = (1 - Math.pow(1 + rr, -n)) / rr;
+
+  // === 매출·영업이익 (모든 기술 공통: 같은 열을 같은 단가로 판매) ===
+  const tariff = eff('heating_tariff') || 0;
+  const auxRev = (eff('aux_revenue_usd') || 0) + cx('aux_revenue_lump');
+  const revenueUsdYr = tariff * annualMWh + auxRev * scale;
+
+  // 기술별 영업이익 = revenue - net_opex
+  const profitCoal   = revenueUsdYr - netCoal;
+  const profitIsotes = revenueUsdYr - netIsotes;
+  const profitPv     = revenueUsdYr - netPv;
+  const profitEtc    = revenueUsdYr - netEtc;
+
+  // 절대 회수기간: CAPEX / 영업이익 (양수일 때만)
+  const paybackAbs = (cap, prof) => prof > 0 ? cap / prof : Infinity;
+  // 절대 NPV: 영업이익 × PVF - CAPEX
+  const npvAbs = (cap, prof) => prof * PVF - cap;
 
   const lcoh = (cap, ann) => safeFinite((cap + PVF * ann) / (PVF * annualMWh) * fx);
   const payback = (capDiff, save) => save > 0 ? capDiff / save : Infinity;
@@ -1511,8 +1584,24 @@ function compute(p, bd) {
     gross: { coal: coalAnnUsd*fx, isotes: isotesAnnUsd*fx, pv: pvAnnUsd*fx, etc: etcAnnUsd*fx },
     credit: { coal: 0, isotes: creditIsotes*fx, pv: creditPv*fx, etc: creditEtc*fx },
     net:   { coal: netCoal*fx, isotes: netIsotes*fx, pv: netPv*fx, etc: netEtc*fx },
+    revenue: { coal: revenueUsdYr*fx, isotes: revenueUsdYr*fx, pv: revenueUsdYr*fx, etc: revenueUsdYr*fx },
+    profit: { coal: profitCoal*fx, isotes: profitIsotes*fx, pv: profitPv*fx, etc: profitEtc*fx },
     lcoh:  { coal: lcoh(capexCoalUsd, netCoal), isotes: lcoh(capexIsotesUsd, netIsotes),
              pv: lcoh(capexPvUsd, netPv), etc: lcoh(capexEtcUsd, netEtc) },
+    // 절대 (수입 대비): 4기술 모두 동일 형식
+    paybackAbs: {
+      coal:   paybackAbs(capexCoalUsd,   profitCoal),
+      isotes: paybackAbs(capexIsotesUsd, profitIsotes),
+      pv:     paybackAbs(capexPvUsd,     profitPv),
+      etc:    paybackAbs(capexEtcUsd,    profitEtc),
+    },
+    npvAbs: {
+      coal:   npvAbs(capexCoalUsd,   profitCoal)   * fx,
+      isotes: npvAbs(capexIsotesUsd, profitIsotes) * fx,
+      pv:     npvAbs(capexPvUsd,     profitPv)     * fx,
+      etc:    npvAbs(capexEtcUsd,    profitEtc)    * fx,
+    },
+    // 상대 (vs 갈탄): 기존 호환용 — 검증 모드에서 사용
     payback: { isotes: payback(capexIsotesUsd - capexCoalUsd, netCoal - netIsotes),
                pv:     payback(capexPvUsd     - capexCoalUsd, netCoal - netPv),
                etc:    payback(capexEtcUsd    - capexCoalUsd, netCoal - netEtc) },
@@ -1541,6 +1630,10 @@ const PARAM_DEFS = {
                      unit: '', min: 0.5, max: 1.0, step: 0.05, default: 0.7, cell: 'B45', tier: 1 },
   coal_price_mult: { label_ko: '갈탄 가격 배율', label_en: 'Coal price multiplier',
                      unit: '×', min: 0.5, max: 2.0, step: 0.1, default: 1.0, cell: 'B19·B20', tier: 1 },
+  heating_tariff:  { label_ko: '난방 단가 (매출)', label_en: 'Heating tariff (revenue)',
+                     unit: 'USD/MWh-th', min: 0, max: 200, step: 1, default: 30, cell: 'R1', tier: 1 },
+  aux_revenue_usd: { label_ko: '부대 수입',         label_en: 'Auxiliary revenue',
+                     unit: 'USD/yr', min: 0, max: 1_000_000, step: 1000, default: 0, cell: 'R2', tier: 1 },
 
   // Tier 2
   daily_mj:        { label_ko: '일일 열공급', label_en: 'Daily heat demand',
@@ -1828,6 +1921,22 @@ const BREAKDOWN_DEFS = {
       { name_ko: '부동액 교체 (5년 주기)', name_en: 'Antifreeze replacement (5y)' },
       { name_ko: '순환펌프 정비', name_en: 'Pump maintenance' },
     ]},
+  // === 수익 (Revenue) ===
+  heating_tariff: { tab: 'revenue', parentUnit: 'USD/MWh-th',
+    parentLabel_ko: '난방 단가 (R1)', parentLabel_en: 'Heating tariff (R1)',
+    suggestedItems: [
+      { name_ko: '기본 단가', name_en: 'Base tariff' },
+      { name_ko: '계절 가산 (겨울 피크)', name_en: 'Seasonal peak surcharge' },
+      { name_ko: 'CDM 보너스', name_en: 'CDM bonus' },
+    ]},
+  aux_revenue_usd: { tab: 'revenue', parentUnit: 'USD/yr',
+    parentLabel_ko: '부대 수입 (R2)', parentLabel_en: 'Auxiliary revenue (R2)',
+    suggestedItems: [
+      { name_ko: '정부 보조금', name_en: 'Government subsidy' },
+      { name_ko: '폐열 판매', name_en: 'Waste heat sale' },
+      { name_ko: '광고·네이밍 권', name_en: 'Advertising & naming rights' },
+      { name_ko: '기타 서비스 매출', name_en: 'Other service revenue' },
+    ]},
 };
 
 // ============================================================
@@ -1843,8 +1952,9 @@ const PARENT_UNIT_INFO = {
   'USD/trip':    { baseCurrency: 'USD', denom: '/회',  allowsCurrency: true },
   'USD/yr':      { baseCurrency: 'USD', denom: '/년',  allowsCurrency: true },
   'MNT/ton':     { baseCurrency: 'MNT', denom: '/ton', allowsCurrency: true },
-  'MNT/kWh':     { baseCurrency: 'MNT', denom: '/kWh', allowsCurrency: true },
-  '% of CAPEX':  { baseCurrency: null,  denom: '',     allowsCurrency: false },  // 단순 %
+  'MNT/kWh':     { baseCurrency: 'MNT', denom: '/kWh',     allowsCurrency: true },
+  'USD/MWh-th':  { baseCurrency: 'USD', denom: '/MWh-th',  allowsCurrency: true },
+  '% of CAPEX':  { baseCurrency: null,  denom: '',         allowsCurrency: false },  // 단순 %
 };
 const CURRENCIES = ['USD', 'KRW', 'MNT'];
 
@@ -2173,7 +2283,56 @@ const TUTORIAL_KO = [
 
    <div class="tip">💡 IR/ODA 미팅에서 "이 숫자의 정확도는?" 질문을 받으면, ★★★★ 항목은 자신 있게, ★ 항목은 "Seed 2에서 정밀화 예정"으로 답변. 정확도를 숨기는 것보다 솔직하게 보여주는 것이 신뢰를 얻습니다.</div>`,
 
-  // 5. 프리셋 활용
+  // 5. 수익 모델 (v2.5 신규)
+  `<h3>왜 수익 framing이 중요한가?</h3>
+   <p>"갈탄 보일러 대비 NPV"는 <strong>"기존 갈탄을 IsoTES로 바꾸면 얼마나 절감되는가"</strong>를 측정합니다. 하지만 실제 사업 의사결정은 다른 질문에 답해야 합니다:</p>
+   <ul>
+     <li>"이 사업을 시작하면 흑자가 나오나?"</li>
+     <li>"투자금 회수에 몇 년 걸리나?" (사업 자체, 갈탄 대비 X)</li>
+     <li>"갈탄·IsoTES·PV·ETC 중 어느 게 가장 수익성 좋은가?" (4기술 평등 비교)</li>
+   </ul>
+   <p>이 질문들은 <strong>수입 대비 framing</strong>이 필요합니다.</p>
+
+   <h3>핵심 파라미터 (Tier 1)</h3>
+   <table>
+     <tr><th>변수</th><th>셀</th><th>기본값</th><th>의미</th></tr>
+     <tr><td>난방 단가</td><td>R1</td><td>$30/MWh-th</td><td>고객에게 판매하는 열 단가 (몽골 추정. Korea ~$50, EU ~$70)</td></tr>
+     <tr><td>부대 수입</td><td>R2</td><td>$0/yr</td><td>난방 외 추가 수입 (정부 보조금·폐열 판매·광고권 등)</td></tr>
+   </table>
+
+   <h3>계산 흐름</h3>
+   <pre style="background:var(--bg); padding:8px; border-radius:4px; font-size:11px;">
+연 매출  = 단가 × 연간 열공급량 (MWh-th) + 부대 수입
+영업이익 = 연 매출 - 연 순비용 (CAPEX × O&M 비율 + 연료비 등)
+NPV     = 영업이익 × PVF(15년, 6%) - CAPEX     ← 양수=흑자 사업
+회수기간 = CAPEX / 영업이익                     ← 사업 자체 회수
+   </pre>
+
+   <h3>비교 기준 토글 (baseline)</h3>
+   <p>중앙 결과 영역의 <strong>비교 기준</strong> 토글로 5가지 framing 선택 가능:</p>
+   <table>
+     <tr><th>모드</th><th>의미</th><th>활용</th></tr>
+     <tr><td>수입 대비 (절대)</td><td>각 기술의 절대 사업성</td><td>"이 사업이 흑자인가?"</td></tr>
+     <tr><td>vs 갈탄</td><td>갈탄 대비 절감</td><td>"기존 갈탄을 교체할 가치?"</td></tr>
+     <tr><td>vs IsoTES</td><td>IsoTES 대비</td><td>"PV/ETC가 IsoTES보다 나은가?"</td></tr>
+     <tr><td>vs PV</td><td>PV 대비</td><td>"ETC가 PV보다 나은가?"</td></tr>
+     <tr><td>vs ETC</td><td>ETC 대비</td><td>"다른 기술이 ETC보다 나은가?"</td></tr>
+   </table>
+
+   <h3>두 framing 결과 비교 예시 (PoC 기본값)</h3>
+   <p>매출 = $30 × 243 MWh = ~$7,290/yr</p>
+   <table>
+     <tr><th>기술</th><th>영업이익</th><th>NPV (절대)</th><th>NPV (vs 갈탄)</th></tr>
+     <tr><td>갈탄 보일러</td><td>$-9,858/yr</td><td>~$-145K (적자)</td><td>$0 (기준)</td></tr>
+     <tr><td>IsoTES+그리드</td><td>$-2,772/yr</td><td>~$-203K (적자)</td><td>~$-45K (갈탄보다 더 손해)</td></tr>
+   </table>
+   <p>→ 매출 $30 가정에서는 4 기술 모두 적자. 흑자 전환에 필요한 단가를 역산하면 IsoTES는 ~$80/MWh, ETC는 ~$60/MWh 정도 필요.</p>
+
+   <div class="tip">💡 <strong>비용 편집기에 "수익 항목" 탭 신설</strong>. 난방 단가를 "기본 단가 + 계절 가산 + CDM 보너스"로 분해하거나, 부대 수입을 "정부 보조금 + 폐열 판매 + 광고권"으로 분해 가능. 통화 셀렉터로 USD/KRW/MNT 자유 입력.</div>
+
+   <div class="warn">⚠ <strong>난방 단가가 0이면 모든 NPV는 음수</strong>. 사업성 평가 전 반드시 R1 값을 시장 조사 후 입력. 몽골 지역난방 도매가는 정확한 자료가 부족해 $30/MWh-th를 잠정 기본값으로 사용 중. KOICA·Mongolia Energy Regulatory Commission 데이터로 추후 갱신 필요.</div>`,
+
+  // 6. 프리셋 활용
   `<h3>14개 시나리오 프리셋</h3>
    <p>우측 패널의 프리셋은 사용자 가이드 §5의 시나리오와 1:1로 매핑되어 있습니다. 클릭 한 번에 모든 슬라이더가 해당 시나리오 값으로 동기화됩니다.</p>
    <h3>IR/ODA 발표용 시퀀스</h3>
@@ -2189,7 +2348,7 @@ const TUTORIAL_KO = [
    <h3>프리셋의 변경 항목</h3>
    <p>각 프리셋은 일부 슬라이더만 변경하고 나머지는 기본값으로 초기화됩니다. 예를 들어 "시나리오 5: 갈탄 +50%"는 갈탄 가격 배율만 1.5로 변경하고 나머지(심야할인·탄소 등)는 모두 기본값으로 돌아갑니다. 이로써 <strong>한 변수만의 효과를 깨끗이 분리</strong>해서 볼 수 있습니다.</p>`,
 
-  // 6. 언어·통화·PDF
+  // 7. 언어·통화·PDF
   `<h3>언어 전환</h3>
    <p>헤더의 <strong>"한국어 / English"</strong> 토글로 즉시 전환. URL에 <code>?lang=en</code> 파라미터를 추가하면 영어로 첫 로드.</p>
    <ul>
@@ -2213,7 +2372,7 @@ const TUTORIAL_KO = [
    </ol>
    <div class="tip">💡 <strong>IR 자료 만들기</strong>: 프리셋별로 6번 인쇄해 6장 PDF를 만들면 "현재 → 정책 → 스케일 → 탄소 → 리스크 → 종합" 흐름의 IR 자료 완성.</div>`,
 
-  // 7. Q&A
+  // 8. Q&A
   `<h3>자주 묻는 질문</h3>
    <h3>Q1. 결과가 Excel 모델과 정확히 같은가요?</h3>
    <p>네, 모든 수식이 <code>heating_business_model_v1.xlsx v1.3</code>의 127개 수식과 1:1 매핑되어 있습니다. <strong>헤더의 "🔬 검증" 버튼</strong>을 누르거나 URL에 <code>?test=1</code>을 추가하면 검증 모드가 활성화되어 PoC·스케일업 5개 시나리오의 기준값과 JS 계산 결과를 표로 비교합니다 (허용 오차 5%). 모델·계산 변경 시 회귀 버그 즉시 감지용입니다.</p>
@@ -2444,7 +2603,47 @@ const TUTORIAL_EN = [
 
    <div class="tip">💡 If asked "How accurate is this number?" in IR/ODA meetings, answer ★★★★ items confidently and ★ items with "to be refined in Seed 2." Transparency about accuracy builds more trust than hiding it.</div>`,
 
-  // 5. Presets
+  // 5. Revenue Model (v2.5 new)
+  `<h3>Why a revenue framing matters</h3>
+   <p>"NPV vs Coal" measures <strong>"How much do I save by switching from coal to IsoTES"</strong>. But real business decisions answer different questions:</p>
+   <ul>
+     <li>"If I start this business, will it be profitable?"</li>
+     <li>"How long until I recover the investment?" (business itself, not vs coal)</li>
+     <li>"Which of Coal/IsoTES/PV/ETC is the most profitable?" (4-way equal comparison)</li>
+   </ul>
+   <p>These need a <strong>revenue-based framing</strong>.</p>
+
+   <h3>Key parameters (Tier 1)</h3>
+   <table>
+     <tr><th>Variable</th><th>Cell</th><th>Default</th><th>Meaning</th></tr>
+     <tr><td>Heating tariff</td><td>R1</td><td>$30/MWh-th</td><td>Per-unit heat sold to customers (Mongolia estimate. Korea ~$50, EU ~$70)</td></tr>
+     <tr><td>Auxiliary revenue</td><td>R2</td><td>$0/yr</td><td>Non-heating income (subsidy, waste heat sale, naming rights, etc.)</td></tr>
+   </table>
+
+   <h3>Calculation flow</h3>
+   <pre style="background:var(--bg); padding:8px; border-radius:4px; font-size:11px;">
+revenue   = tariff × annual_heat_MWh + aux_revenue
+profit    = revenue - net_opex
+NPV       = profit × PVF(15y, 6%) - CAPEX    ← positive = profitable business
+payback   = CAPEX / profit                    ← business-level recovery
+   </pre>
+
+   <h3>Comparison baseline toggle</h3>
+   <p>The <strong>Baseline</strong> selector in the center results offers 5 framing modes:</p>
+   <table>
+     <tr><th>Mode</th><th>Meaning</th><th>Use case</th></tr>
+     <tr><td>vs Revenue (absolute)</td><td>Each tech's standalone viability</td><td>"Is this business profitable?"</td></tr>
+     <tr><td>vs Coal</td><td>Savings vs coal</td><td>"Worth replacing existing coal?"</td></tr>
+     <tr><td>vs IsoTES</td><td>vs IsoTES baseline</td><td>"Is PV/ETC better than IsoTES?"</td></tr>
+     <tr><td>vs PV</td><td>vs PV baseline</td><td>"Is ETC better than PV?"</td></tr>
+     <tr><td>vs ETC</td><td>vs ETC baseline</td><td>"Other tech better than ETC?"</td></tr>
+   </table>
+
+   <div class="tip">💡 <strong>Cost Editor adds a new "Revenue items" tab</strong>. Decompose heating tariff into "base + seasonal surcharge + CDM bonus", or aux revenue into "subsidy + waste heat + ads". Currency selector USD/KRW/MNT for flexible input.</div>
+
+   <div class="warn">⚠ <strong>NPVs are negative if tariff = 0</strong>. Always set R1 to a market-researched value before viability assessment. Mongolia district heating wholesale data is limited — $30/MWh-th is a placeholder. Update from KOICA / Mongolia Energy Regulatory Commission.</div>`,
+
+  // 6. Presets
   `<h3>14 scenario presets</h3>
    <p>The right panel presets map 1:1 with User Guide §5 scenarios. One click syncs all sliders to that scenario's values.</p>
    <h3>IR/ODA presentation sequence</h3>
@@ -2460,7 +2659,7 @@ const TUTORIAL_EN = [
    <h3>What each preset changes</h3>
    <p>Each preset modifies only a subset of sliders, resetting others to defaults. E.g., "S5: Coal +50%" only changes coal price multiplier to 1.5, with night discount, carbon, etc. all back to defaults. This <strong>cleanly isolates the effect of a single variable</strong>.</p>`,
 
-  // 6. Language·Currency·PDF
+  // 7. Language·Currency·PDF
   `<h3>Language toggle</h3>
    <p>Use the header <strong>"한국어 / English"</strong> toggle to switch instantly. Add <code>?lang=en</code> to URL for English-first load.</p>
    <ul>
@@ -2484,7 +2683,7 @@ const TUTORIAL_EN = [
    </ol>
    <div class="tip">💡 <strong>Build IR materials</strong>: print 6 times across presets to create a 6-page PDF flow: "current → policy → scale → carbon → risk → final".</div>`,
 
-  // 7. FAQ
+  // 8. FAQ
   `<h3>Frequently asked questions</h3>
    <h3>Q1. Are results exactly the same as the Excel model?</h3>
    <p>Yes — all formulas are 1:1 mapped to the 127 formulas in <code>heating_business_model_v1.xlsx v1.3</code>. Click the <strong>"🔬 Verify" button</strong> in the header (or add <code>?test=1</code> to URL) to activate verification mode that compares 5 PoC + Scale-up reference scenarios against JS computation (5% tolerance). Use this for regression detection when modifying the model.</p>
@@ -2603,6 +2802,7 @@ function simulator() {
       { key: 'tabSlider' },
       { key: 'tabResults' },
       { key: 'tabCost' },
+      { key: 'tabRevenue' },
       { key: 'tabPresets' },
       { key: 'tabIO' },
       { key: 'tabFaq' },
@@ -2614,7 +2814,8 @@ function simulator() {
       this.p.ccy = 'USD';
       this.p.lang = 'ko';
       this.p.carbon_on = false;
-      this.p.kpiTech = 'isotes';   // KPI 카드 비교 대상: 'isotes' | 'pv' | 'etc'
+      this.p.kpiTech = 'isotes';   // KPI 카드 비교 대상: 'coal' | 'isotes' | 'pv' | 'etc'
+      this.p.comparisonBaseline = 'absolute';  // 'absolute' | 'coal' | 'isotes' | 'pv' | 'etc'
       this.tier1Keys = Object.keys(PARAM_DEFS).filter(k => PARAM_DEFS[k].tier === 1);
       this.tier2Keys = Object.keys(PARAM_DEFS).filter(k => PARAM_DEFS[k].tier === 2);
       this.tier3Keys = Object.keys(PARAM_DEFS).filter(k => PARAM_DEFS[k].tier === 3);
@@ -2764,6 +2965,9 @@ function simulator() {
           { applyTo: 'isotes_opex', unit: 'USD/yr', label_ko: 'IsoTES 운영비 추가 (USD/yr)', label_en: 'Add to IsoTES OPEX (USD/yr)' },
           { applyTo: 'pv_opex', unit: 'USD/yr', label_ko: 'PV 운영비 추가 (USD/yr)', label_en: 'Add to PV OPEX (USD/yr)' },
           { applyTo: 'etc_opex', unit: 'USD/yr', label_ko: 'ETC 운영비 추가 (USD/yr)', label_en: 'Add to ETC OPEX (USD/yr)' },
+        ],
+        revenue: [
+          { applyTo: 'aux_revenue_lump', unit: 'USD/yr', label_ko: '추가 부대 수입 (USD/yr)', label_en: 'Add to auxiliary revenue (USD/yr)' },
         ],
       };
       return all[tab] || [];
@@ -3098,6 +3302,41 @@ function simulator() {
       const k = this.p.kpiTech || 'isotes';
       return this.t('kpiTech' + k.charAt(0).toUpperCase() + k.slice(1));
     },
+    kpiTechKeys: ['coal', 'isotes', 'pv', 'etc'],
+    baselineKeys: ['absolute', 'coal', 'isotes', 'pv', 'etc'],
+    baselineName() {
+      const k = this.p.comparisonBaseline || 'absolute';
+      return this.t('baseline' + k.charAt(0).toUpperCase() + k.slice(1));
+    },
+
+    // baseline 기반 NPV 값
+    npvForTech(tech) {
+      const r = this.r;
+      const baseline = this.p.comparisonBaseline || 'absolute';
+      if (baseline === 'absolute') return r.npvAbs?.[tech] ?? 0;
+      // 상대: 자기 자신은 0
+      if (tech === baseline) return 0;
+      return (r.npvAbs?.[tech] ?? 0) - (r.npvAbs?.[baseline] ?? 0);
+    },
+    // baseline 기반 회수기간
+    paybackForTech(tech) {
+      const r = this.r;
+      const baseline = this.p.comparisonBaseline || 'absolute';
+      if (baseline === 'absolute') return r.paybackAbs?.[tech] ?? Infinity;
+      if (tech === baseline) return 0;
+      const capDiff = (r.capex?.[tech] ?? 0) - (r.capex?.[baseline] ?? 0);
+      const save = (r.profit?.[tech] ?? 0) - (r.profit?.[baseline] ?? 0);
+      return save > 0 ? capDiff / save : Infinity;
+    },
+    // NPV 행 라벨 (baseline에 따라)
+    npvRowLabel() {
+      const b = this.p.comparisonBaseline || 'absolute';
+      return b === 'absolute' ? this.t('rowNpvAbs') : (this.t('rowNpvRel') + ' ' + this.baselineName());
+    },
+    paybackRowLabel() {
+      const b = this.p.comparisonBaseline || 'absolute';
+      return b === 'absolute' ? this.t('rowPaybackAbs') : (this.t('rowPaybackRel') + ' ' + this.baselineName());
+    },
     presetDesc(preset) {
       return preset['desc_' + (this.p.lang || 'ko')] || preset.desc_ko;
     },
@@ -3241,11 +3480,13 @@ function simulator() {
                                backgroundColor: techColors }] },
           options: makeOpts(true)
         });
+        // NPV 차트: 4기술 (baseline 반응형)
         CHART_INSTANCES.npv = new Chart(npvEl, {
           type: 'bar',
-          data: { labels: altLabels,
-                  datasets: [{ label: 'NPV', data: [r.npv.isotes||0, r.npv.pv||0, r.npv.etc||0],
-                               backgroundColor: altColors }] },
+          data: { labels: techLabels,
+                  datasets: [{ label: 'NPV',
+                               data: [this.npvForTech('coal'), this.npvForTech('isotes'), this.npvForTech('pv'), this.npvForTech('etc')],
+                               backgroundColor: techColors }] },
           options: makeOpts(true)
         });
         CHART_INSTANCES.cost = new Chart(costEl, {
@@ -3255,12 +3496,18 @@ function simulator() {
                                backgroundColor: techColors }] },
           options: makeOpts(false)
         });
+        // Payback 차트 (구 CO2 슬롯 재사용): 4기술 (baseline 반응형)
         CHART_INSTANCES.co2 = new Chart(co2El, {
           type: 'bar',
-          data: { labels: altLabels,
-                  datasets: [{ label: 'CO2 saved (tCO2/yr)',
-                               data: [r.co2.isotes||0, r.co2.pv||0, r.co2.etc||0],
-                               backgroundColor: altColors }] },
+          data: { labels: techLabels,
+                  datasets: [{ label: 'Payback (yr)',
+                               data: [
+                                 this._cappedPayback(this.paybackForTech('coal')),
+                                 this._cappedPayback(this.paybackForTech('isotes')),
+                                 this._cappedPayback(this.paybackForTech('pv')),
+                                 this._cappedPayback(this.paybackForTech('etc')),
+                               ],
+                               backgroundColor: techColors }] },
           options: makeOpts(true)
         });
 
@@ -3271,25 +3518,40 @@ function simulator() {
       }
     },
 
+    _cappedPayback(v) {
+      if (!Number.isFinite(v)) return 99;
+      if (v > 50) return 50;     // 차트 가시성: 50년 이상은 50으로 캡
+      if (v < -50) return -50;
+      return v;
+    },
+
     updateCharts() {
       if (!this.chartsReady || !CHART_INSTANCES.lcoh) return;
       try {
         const r = this.r;
-        // Update labels (언어 토글 즉시 반영)
         const techLabels = [this.t('coal'), this.t('isotesGrid'), this.t('pvIsotes'), this.t('etcIsotes')];
-        const altLabels  = [this.t('isotesGrid'), this.t('pvIsotes'), this.t('etcIsotes')];
 
         CHART_INSTANCES.lcoh.data.labels = techLabels;
         CHART_INSTANCES.lcoh.data.datasets[0].data = [r.lcoh.coal||0, r.lcoh.isotes||0, r.lcoh.pv||0, r.lcoh.etc||0];
 
-        CHART_INSTANCES.npv.data.labels = altLabels;
-        CHART_INSTANCES.npv.data.datasets[0].data = [r.npv.isotes||0, r.npv.pv||0, r.npv.etc||0];
+        // NPV 차트: 4기술 (baseline 반응형)
+        CHART_INSTANCES.npv.data.labels = techLabels;
+        CHART_INSTANCES.npv.data.datasets[0].data = [
+          this.npvForTech('coal'), this.npvForTech('isotes'),
+          this.npvForTech('pv'),   this.npvForTech('etc'),
+        ];
 
         CHART_INSTANCES.cost.data.labels = techLabels;
         CHART_INSTANCES.cost.data.datasets[0].data = [r.net.coal||0, r.net.isotes||0, r.net.pv||0, r.net.etc||0];
 
-        CHART_INSTANCES.co2.data.labels = altLabels;
-        CHART_INSTANCES.co2.data.datasets[0].data = [r.co2.isotes||0, r.co2.pv||0, r.co2.etc||0];
+        // Payback 차트: 4기술 (baseline 반응형)
+        CHART_INSTANCES.co2.data.labels = techLabels;
+        CHART_INSTANCES.co2.data.datasets[0].data = [
+          this._cappedPayback(this.paybackForTech('coal')),
+          this._cappedPayback(this.paybackForTech('isotes')),
+          this._cappedPayback(this.paybackForTech('pv')),
+          this._cappedPayback(this.paybackForTech('etc')),
+        ];
 
         CHART_INSTANCES.lcoh.update('none');
         CHART_INSTANCES.npv.update('none');
