@@ -453,26 +453,49 @@
   .cost-item-body { padding: 8px 12px; }
   .cost-subitem {
     display: grid;
-    grid-template-columns: 1fr auto auto;
-    gap: 6px;
-    padding: 6px 0;
+    grid-template-columns: minmax(180px, 2fr) minmax(160px, 1.5fr) auto;
+    gap: 8px;
+    padding: 8px 0;
     border-bottom: 1px dashed var(--border);
     font-size: 12px;
-    align-items: center;
+    align-items: start;
   }
   .cost-subitem:last-child { border-bottom: none; }
-  .cost-subitem input[type=text] {
+  .cost-subitem .name-cell {
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .cost-subitem .name-cell input[type=text] {
     padding: 3px 6px; font-size: 11px;
     border: 1px solid var(--border); border-radius: 3px;
     width: 100%;
   }
-  .cost-subitem input[type=number] {
-    padding: 3px 6px; font-size: 11px;
+  .cost-subitem .value-cell {
+    display: flex; gap: 4px; align-items: center;
+  }
+  .cost-subitem .value-input {
+    flex: 1; min-width: 0;
+    padding: 4px 6px; font-size: 12px;
     border: 1px solid var(--border); border-radius: 3px;
-    width: 110px; text-align: right;
+    text-align: right; font-variant-numeric: tabular-nums;
+  }
+  .cost-subitem .unit-select {
+    padding: 4px 6px; font-size: 11px;
+    border: 1px solid var(--border); border-radius: 3px;
+    background: var(--panel); cursor: pointer;
+    flex-shrink: 0;
+  }
+  .cost-subitem .formula-result {
+    flex: 1; text-align: right;
+    font-weight: 600; color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    padding: 4px 6px;
+  }
+  .cost-subitem .action-cell {
+    display: flex; gap: 4px; align-items: center;
+    flex-shrink: 0;
   }
   .cost-subitem .mode-btn {
-    padding: 2px 8px; font-size: 10px; cursor: pointer;
+    padding: 3px 8px; font-size: 10px; cursor: pointer;
     border: 1px solid var(--border); background: var(--bg); border-radius: 3px;
     white-space: nowrap;
   }
@@ -480,18 +503,44 @@
     background: var(--accent-soft); color: var(--accent); border-color: var(--accent);
   }
   .cost-subitem .remove-btn {
-    padding: 2px 8px; font-size: 11px; cursor: pointer;
+    padding: 3px 9px; font-size: 13px; cursor: pointer;
     border: 1px solid #f5b7b1; background: #fce8e6; color: var(--bad);
-    border-radius: 3px;
+    border-radius: 3px; line-height: 1;
   }
   .cost-subitem .formula-row {
     grid-column: 1 / -1;
-    display: flex; gap: 4px; align-items: center;
-    padding: 4px 0 4px 12px;
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    padding: 6px 8px;
+    margin-top: 4px;
     font-size: 11px; color: var(--muted);
+    background: var(--bg); border-radius: 3px;
   }
-  .cost-subitem .formula-row input[type=text] { width: 70px; }
-  .cost-subitem .formula-row input[type=number] { width: 90px; }
+  .cost-subitem .formula-row .formula-input {
+    width: 90px;
+    padding: 3px 5px; font-size: 11px;
+    border: 1px solid var(--border); border-radius: 3px;
+    text-align: right; font-variant-numeric: tabular-nums;
+  }
+  .cost-subitem .formula-row .qty-input {
+    width: 75px;
+    padding: 3px 5px; font-size: 11px;
+    border: 1px solid var(--border); border-radius: 3px;
+    text-align: right; font-variant-numeric: tabular-nums;
+  }
+  .cost-subitem .formula-row .unit-label-input {
+    width: 70px;
+    padding: 3px 5px; font-size: 11px;
+    border: 1px solid var(--border); border-radius: 3px;
+  }
+  .cost-subitem .formula-row .unit-select-sm {
+    padding: 3px 4px; font-size: 10px;
+    border: 1px solid var(--border); border-radius: 3px;
+    background: var(--panel); cursor: pointer;
+  }
+  @media (max-width: 700px) {
+    .cost-subitem { grid-template-columns: 1fr; }
+    .cost-subitem .action-cell { justify-content: flex-end; }
+  }
   .cost-add-btn {
     width: 100%; padding: 6px; margin-top: 6px;
     border: 1px dashed var(--border); background: var(--bg);
@@ -954,19 +1003,35 @@
                 <div class="cost-item-body">
                   <template x-for="(item, idx) in breakdowns[key].items" :key="idx">
                     <div class="cost-subitem">
-                      <input type="text"
-                             :value="bdItemName(item)"
-                             @input="(p.lang==='ko' ? item.name_ko = $event.target.value : item.name_en = $event.target.value); onSubItemEdit()"
-                             :placeholder="t('costSubName')">
+                      <!-- 이름 셀: KO·EN 동시 편집 -->
+                      <div class="name-cell">
+                        <input type="text" x-model="item.name_ko" @input="onSubItemEdit()" placeholder="이름 (KO)">
+                        <input type="text" x-model="item.name_en" @input="onSubItemEdit()" placeholder="Name (EN)">
+                      </div>
+
+                      <!-- 값 셀: 콤마 포맷 + 단위 셀렉터 (simple 모드) -->
                       <template x-if="item.mode === 'simple'">
-                        <input type="number" step="any"
-                               x-model.number="item.value"
-                               @input="onSubItemEdit()">
+                        <div class="value-cell">
+                          <input type="text" class="value-input"
+                                 :value="formatScaled(item.value, ensureUnit(item, bdDef(key).parentUnit))"
+                                 @input="item.value = parseScaled($event.target.value, item.valueUnit || 1); onSubItemEdit()"
+                                 @blur="$event.target.value = formatScaled(item.value, item.valueUnit || 1)">
+                          <select class="unit-select" x-model.number="item.valueUnit" @change="onSubItemEdit()">
+                            <template x-for="opt in unitOptions(bdDef(key).parentUnit)" :key="opt.scale">
+                              <option :value="opt.scale" x-text="opt['label_' + (p.lang||'ko')]"></option>
+                            </template>
+                          </select>
+                        </div>
                       </template>
                       <template x-if="item.mode === 'formula'">
-                        <span style="font-size:11px;color:var(--muted);" x-text="((item.unitCost||0)*(item.quantity||0)).toLocaleString()"></span>
+                        <div class="value-cell">
+                          <span class="formula-result"
+                                x-text="formatNumber((item.unitCost||0)*(item.quantity||0)) + ' ' + bdDef(key).parentUnit"></span>
+                        </div>
                       </template>
-                      <div style="display:flex; gap:4px;">
+
+                      <!-- 액션 셀: 모드 토글 + 삭제 -->
+                      <div class="action-cell">
                         <button class="mode-btn" :class="{active: item.mode === 'simple'}"
                                 @click="if(item.mode!=='simple') toggleSubItemMode(key, idx)"
                                 x-text="t('costModeSimple')"></button>
@@ -975,15 +1040,33 @@
                                 x-text="t('costModeFormula')"></button>
                         <button class="remove-btn" @click="removeSubItem(key, idx)" :title="t('costRemoveItem')">×</button>
                       </div>
+
+                      <!-- formula 모드 추가 행 -->
                       <template x-if="item.mode === 'formula'">
                         <div class="formula-row">
                           <span x-text="t('costUnitCost') + ':'"></span>
-                          <input type="number" step="any" x-model.number="item.unitCost" @input="onSubItemEdit()">
+                          <input type="text" class="formula-input"
+                                 :value="formatScaled(item.unitCost, ensureUnit(item, bdDef(key).parentUnit))"
+                                 @input="item.unitCost = parseScaled($event.target.value, item.valueUnit || 1); onSubItemEdit()"
+                                 @blur="$event.target.value = formatScaled(item.unitCost, item.valueUnit || 1)">
+                          <select class="unit-select-sm" x-model.number="item.valueUnit" @change="onSubItemEdit()">
+                            <template x-for="opt in unitOptions(bdDef(key).parentUnit)" :key="opt.scale">
+                              <option :value="opt.scale" x-text="opt['label_' + (p.lang||'ko')]"></option>
+                            </template>
+                          </select>
+                          <span>/</span>
+                          <input type="text" class="unit-label-input"
+                                 x-model="item['unitLabel_'+(p.lang||'ko')]"
+                                 @input="onSubItemEdit()"
+                                 :placeholder="t('costUnitLabel')">
                           <span>×</span>
                           <span x-text="t('costQuantity') + ':'"></span>
-                          <input type="number" step="any" x-model.number="item.quantity" @input="onSubItemEdit()">
-                          <input type="text" x-model="item['unitLabel_'+(p.lang||'ko')]" @input="onSubItemEdit()"
-                                 :placeholder="t('costUnitLabel')">
+                          <input type="text" class="qty-input"
+                                 :value="formatNumber(item.quantity)"
+                                 @input="item.quantity = parseNumber($event.target.value); onSubItemEdit()"
+                                 @blur="$event.target.value = formatNumber(item.quantity)">
+                          <span x-text="'= ' + formatNumber((item.unitCost||0)*(item.quantity||0)) + ' ' + bdDef(key).parentUnit"
+                                style="font-weight: 600; color: var(--accent);"></span>
                         </div>
                       </template>
                     </div>
@@ -1741,6 +1824,63 @@ const BREAKDOWN_DEFS = {
 };
 
 // ============================================================
+// Unit display options — per parent unit, user picks display scale
+// (저장은 항상 parent 단위로. scale은 표시·입력용 변환 계수)
+// ============================================================
+const UNIT_OPTIONS = {
+  'USD': [
+    { scale: 1,         label_ko: '$',         label_en: '$' },
+    { scale: 1000,      label_ko: '$K (천)',   label_en: '$K' },
+    { scale: 1000000,   label_ko: '$M (백만)', label_en: '$M' },
+  ],
+  'KRW': [
+    { scale: 1,         label_ko: '원',          label_en: 'KRW' },
+    { scale: 1000,      label_ko: '천원',        label_en: 'thousand KRW' },
+    { scale: 10000,     label_ko: '만원',        label_en: '10K KRW' },
+    { scale: 1000000,   label_ko: '백만원 (M)',  label_en: 'M KRW' },
+    { scale: 100000000, label_ko: '억원',        label_en: '100M KRW' },
+  ],
+  'USD/Wp': [
+    { scale: 1,    label_ko: '$/Wp', label_en: '$/Wp' },
+    { scale: 0.01, label_ko: '¢/Wp', label_en: '¢/Wp' },
+  ],
+  'USD/m²': [
+    { scale: 1, label_ko: '$/m²', label_en: '$/m²' },
+  ],
+  'USD/trip': [
+    { scale: 1, label_ko: '$/회', label_en: '$/trip' },
+  ],
+  'USD/yr': [
+    { scale: 1,    label_ko: '$/년',     label_en: '$/yr' },
+    { scale: 1000, label_ko: '$K/년',    label_en: '$K/yr' },
+  ],
+  'MNT/ton': [
+    { scale: 1,    label_ko: 'MNT/ton',     label_en: 'MNT/ton' },
+    { scale: 1000, label_ko: '천 MNT/ton',  label_en: 'K MNT/ton' },
+  ],
+  'MNT/kWh': [
+    { scale: 1, label_ko: 'MNT/kWh', label_en: 'MNT/kWh' },
+  ],
+  '% of CAPEX': [
+    { scale: 0.01,   label_ko: '%',        label_en: '%' },
+    { scale: 0.0001, label_ko: '‱ (bp)',   label_en: 'bp' },
+    { scale: 1,      label_ko: '비율',     label_en: 'ratio' },
+  ],
+};
+
+// 헬퍼: parent 단위·값에 맞는 스마트 표시 단위 scale
+function _smartScale(parentUnit, value) {
+  const opts = UNIT_OPTIONS[parentUnit] || [{ scale: 1 }];
+  if (!Number.isFinite(value) || value === 0) return opts[0].scale;
+  const absV = Math.abs(value);
+  let best = opts[0].scale;
+  for (const opt of opts) {
+    if (absV / opt.scale >= 1) best = opt.scale;
+  }
+  return best;
+}
+
+// ============================================================
 // Breakdown preset library — apply with one click
 // ============================================================
 const BREAKDOWN_PRESETS = [
@@ -1765,11 +1905,13 @@ const BREAKDOWN_PRESETS = [
         const parentVal = p[key];
         const n = def.suggestedItems.length;
         const each = parentVal / n;
+        const smartScale = _smartScale(def.parentUnit, each);
         bd[key] = {
           enabled: true,
           items: def.suggestedItems.map(s => ({
             name_ko: s.name_ko, name_en: s.name_en,
             mode: 'simple', value: each,
+            valueUnit: smartScale,
             unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
           })),
         };
@@ -1790,11 +1932,14 @@ const BREAKDOWN_PRESETS = [
         const def = BREAKDOWN_DEFS[key];
         const parentVal = p[key];
         const n = def.suggestedItems.length;
+        const each = parentVal / n;
+        const smartScale = _smartScale(def.parentUnit, each);
         bd[key] = {
           enabled: true,
           items: def.suggestedItems.map(s => ({
             name_ko: s.name_ko, name_en: s.name_en,
-            mode: 'simple', value: parentVal / n,
+            mode: 'simple', value: each,
+            valueUnit: smartScale,
             unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
           })),
         };
@@ -1815,11 +1960,14 @@ const BREAKDOWN_PRESETS = [
         const def = BREAKDOWN_DEFS[key];
         const parentVal = p[key];
         const n = def.suggestedItems.length;
+        const each = parentVal / n;
+        const smartScale = _smartScale(def.parentUnit, each);
         bd[key] = {
           enabled: true,
           items: def.suggestedItems.map(s => ({
             name_ko: s.name_ko, name_en: s.name_en,
-            mode: 'simple', value: parentVal / n,
+            mode: 'simple', value: each,
+            valueUnit: smartScale,
             unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
           })),
         };
@@ -2538,6 +2686,55 @@ function simulator() {
     openCostEditor() { this.costEditorOpen = true; },
     closeCostEditor() { this.costEditorOpen = false; },
 
+    // 단위 옵션 + 스마트 기본값
+    unitOptions(parentUnit) {
+      return UNIT_OPTIONS[parentUnit] || [{ scale: 1, label_ko: parentUnit, label_en: parentUnit }];
+    },
+    smartDefaultUnit(parentUnit, value) {
+      const opts = this.unitOptions(parentUnit);
+      if (!Number.isFinite(value) || value === 0) return opts[0].scale;
+      const absV = Math.abs(value);
+      // displayed >= 1 인 가장 큰 scale 선택 (가독성↑)
+      let best = opts[0].scale;
+      for (const opt of opts) {
+        if (absV / opt.scale >= 1) best = opt.scale;
+      }
+      return best;
+    },
+    // 3-digit comma 포맷
+    formatNumber(v) {
+      if (v === undefined || v === null || isNaN(v)) return '';
+      const n = Number(v);
+      if (n === 0) return '0';
+      // 매우 작은 값(< 0.01)은 유효숫자 6자리, 큰 값은 소수점 6자리
+      if (Math.abs(n) >= 1) {
+        return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
+      }
+      return n.toLocaleString(undefined, { maximumSignificantDigits: 6 });
+    },
+    parseNumber(s) {
+      if (typeof s !== 'string') return Number(s) || 0;
+      // 쉼표 제거 후 파싱. 빈 문자열·잘못된 입력은 0.
+      const cleaned = s.replace(/,/g, '').trim();
+      const n = parseFloat(cleaned);
+      return Number.isFinite(n) ? n : 0;
+    },
+    // 단위 적용 표시·파싱 (저장은 parent 단위, 표시·입력은 사용자 scale)
+    formatScaled(value, scale) {
+      return this.formatNumber((value || 0) / (scale || 1));
+    },
+    parseScaled(s, scale) {
+      return this.parseNumber(s) * (scale || 1);
+    },
+    // sub-item의 valueUnit 보장 (없으면 스마트 기본값 부여)
+    ensureUnit(item, parentUnit) {
+      if (!item.valueUnit) {
+        const ref = item.mode === 'formula' ? ((item.unitCost || 0) * (item.quantity || 0)) : (item.value || 0);
+        item.valueUnit = this.smartDefaultUnit(parentUnit, ref || 1);
+      }
+      return item.valueUnit;
+    },
+
     breakdownActive(key) {
       const b = this.breakdowns[key];
       return !!(b && b.enabled && b.items && b.items.length > 0);
@@ -2636,6 +2833,7 @@ function simulator() {
         items: [{
           name_ko: '항목 1', name_en: 'Item 1',
           mode: 'simple', value: 0,
+          valueUnit: _smartScale(f.unit, 0),
           unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
         }],
       };
@@ -2664,8 +2862,8 @@ function simulator() {
       if (!def) return;
       const parentVal = this.p[key];
       const n = def.suggestedItems.length;
-      // 권장 sub-items를 시작값으로, 부모 값을 균등 분배
       const each = parentVal / n;
+      const smartScale = this.smartDefaultUnit(def.parentUnit, each);
       this.breakdowns[key] = {
         enabled: true,
         items: def.suggestedItems.map(s => ({
@@ -2673,7 +2871,7 @@ function simulator() {
           name_en: s.name_en,
           mode: 'simple',
           value: each,
-          // formula 모드용 (mode 전환 시 사용)
+          valueUnit: smartScale,        // 표시 단위 (저장은 parent 단위)
           unitCost: 0,
           quantity: 0,
           unitLabel_ko: '',
@@ -2706,9 +2904,15 @@ function simulator() {
     addSubItem(key) {
       const b = this.breakdowns[key];
       if (!b) return;
+      // 직전 sub-item의 단위를 상속, 없으면 parent 단위 (scale=1)
+      const def = this.bdDef(key);
+      const inheritUnit = b.items.length > 0
+        ? b.items[b.items.length - 1].valueUnit
+        : this.unitOptions(def.parentUnit)[0].scale;
       b.items.push({
         name_ko: '신규 항목', name_en: 'New item',
         mode: 'simple', value: 0,
+        valueUnit: inheritUnit,
         unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
       });
       this.saveBreakdowns();
