@@ -1009,18 +1009,23 @@
                         <input type="text" x-model="item.name_en" @input="onSubItemEdit()" placeholder="Name (EN)">
                       </div>
 
-                      <!-- 값 셀: 콤마 포맷 + 단위 셀렉터 (simple 모드) -->
+                      <!-- 값 셀: 콤마 포맷 + 통화 셀렉터 (simple 모드) -->
                       <template x-if="item.mode === 'simple'">
                         <div class="value-cell">
                           <input type="text" class="value-input"
-                                 :value="formatScaled(item.value, ensureUnit(item, bdDef(key).parentUnit))"
-                                 @input="item.value = parseScaled($event.target.value, item.valueUnit || 1); onSubItemEdit()"
-                                 @blur="$event.target.value = formatScaled(item.value, item.valueUnit || 1)">
-                          <select class="unit-select" x-model.number="item.valueUnit" @change="onSubItemEdit()">
-                            <template x-for="opt in unitOptions(bdDef(key).parentUnit)" :key="opt.scale">
-                              <option :value="opt.scale" x-text="opt['label_' + (p.lang||'ko')]"></option>
-                            </template>
-                          </select>
+                                 :value="displayValueIn(item.value, bdDef(key).parentUnit, item.valueCurrency)"
+                                 @input="item.value = parseValueFrom($event.target.value, bdDef(key).parentUnit, item.valueCurrency); onSubItemEdit()"
+                                 @blur="$event.target.value = displayValueIn(item.value, bdDef(key).parentUnit, item.valueCurrency)">
+                          <template x-if="parentUnitInfo(bdDef(key).parentUnit).allowsCurrency">
+                            <select class="unit-select" x-model="item.valueCurrency" @change="onSubItemEdit()">
+                              <template x-for="ccy in currencyOptions()" :key="ccy">
+                                <option :value="ccy" x-text="ccy + parentUnitInfo(bdDef(key).parentUnit).denom"></option>
+                              </template>
+                            </select>
+                          </template>
+                          <template x-if="!parentUnitInfo(bdDef(key).parentUnit).allowsCurrency">
+                            <span style="padding: 4px 6px; font-size: 11px; color: var(--muted);">%</span>
+                          </template>
                         </div>
                       </template>
                       <template x-if="item.mode === 'formula'">
@@ -1046,14 +1051,16 @@
                         <div class="formula-row">
                           <span x-text="t('costUnitCost') + ':'"></span>
                           <input type="text" class="formula-input"
-                                 :value="formatScaled(item.unitCost, ensureUnit(item, bdDef(key).parentUnit))"
-                                 @input="item.unitCost = parseScaled($event.target.value, item.valueUnit || 1); onSubItemEdit()"
-                                 @blur="$event.target.value = formatScaled(item.unitCost, item.valueUnit || 1)">
-                          <select class="unit-select-sm" x-model.number="item.valueUnit" @change="onSubItemEdit()">
-                            <template x-for="opt in unitOptions(bdDef(key).parentUnit)" :key="opt.scale">
-                              <option :value="opt.scale" x-text="opt['label_' + (p.lang||'ko')]"></option>
-                            </template>
-                          </select>
+                                 :value="displayValueIn(item.unitCost, bdDef(key).parentUnit, item.valueCurrency)"
+                                 @input="item.unitCost = parseValueFrom($event.target.value, bdDef(key).parentUnit, item.valueCurrency); onSubItemEdit()"
+                                 @blur="$event.target.value = displayValueIn(item.unitCost, bdDef(key).parentUnit, item.valueCurrency)">
+                          <template x-if="parentUnitInfo(bdDef(key).parentUnit).allowsCurrency">
+                            <select class="unit-select-sm" x-model="item.valueCurrency" @change="onSubItemEdit()">
+                              <template x-for="ccy in currencyOptions()" :key="ccy">
+                                <option :value="ccy" x-text="ccy"></option>
+                              </template>
+                            </select>
+                          </template>
                           <span>/</span>
                           <input type="text" class="unit-label-input"
                                  x-model="item['unitLabel_'+(p.lang||'ko')]"
@@ -1824,60 +1831,30 @@ const BREAKDOWN_DEFS = {
 };
 
 // ============================================================
-// Unit display options — per parent unit, user picks display scale
-// (저장은 항상 parent 단위로. scale은 표시·입력용 변환 계수)
+// Parent unit metadata — base currency + denominator (per X)
+// Sub-item values stored in parent base currency, but can be entered
+// in USD / KRW / MNT (auto-converted via FX rates).
 // ============================================================
-const UNIT_OPTIONS = {
-  'USD': [
-    { scale: 1,         label_ko: '$',         label_en: '$' },
-    { scale: 1000,      label_ko: '$K (천)',   label_en: '$K' },
-    { scale: 1000000,   label_ko: '$M (백만)', label_en: '$M' },
-  ],
-  'KRW': [
-    { scale: 1,         label_ko: '원',          label_en: 'KRW' },
-    { scale: 1000,      label_ko: '천원',        label_en: 'thousand KRW' },
-    { scale: 10000,     label_ko: '만원',        label_en: '10K KRW' },
-    { scale: 1000000,   label_ko: '백만원 (M)',  label_en: 'M KRW' },
-    { scale: 100000000, label_ko: '억원',        label_en: '100M KRW' },
-  ],
-  'USD/Wp': [
-    { scale: 1,    label_ko: '$/Wp', label_en: '$/Wp' },
-    { scale: 0.01, label_ko: '¢/Wp', label_en: '¢/Wp' },
-  ],
-  'USD/m²': [
-    { scale: 1, label_ko: '$/m²', label_en: '$/m²' },
-  ],
-  'USD/trip': [
-    { scale: 1, label_ko: '$/회', label_en: '$/trip' },
-  ],
-  'USD/yr': [
-    { scale: 1,    label_ko: '$/년',     label_en: '$/yr' },
-    { scale: 1000, label_ko: '$K/년',    label_en: '$K/yr' },
-  ],
-  'MNT/ton': [
-    { scale: 1,    label_ko: 'MNT/ton',     label_en: 'MNT/ton' },
-    { scale: 1000, label_ko: '천 MNT/ton',  label_en: 'K MNT/ton' },
-  ],
-  'MNT/kWh': [
-    { scale: 1, label_ko: 'MNT/kWh', label_en: 'MNT/kWh' },
-  ],
-  '% of CAPEX': [
-    { scale: 0.01,   label_ko: '%',        label_en: '%' },
-    { scale: 0.0001, label_ko: '‱ (bp)',   label_en: 'bp' },
-    { scale: 1,      label_ko: '비율',     label_en: 'ratio' },
-  ],
+const PARENT_UNIT_INFO = {
+  'USD':         { baseCurrency: 'USD', denom: '',     allowsCurrency: true },
+  'KRW':         { baseCurrency: 'KRW', denom: '',     allowsCurrency: true },
+  'USD/Wp':      { baseCurrency: 'USD', denom: '/Wp',  allowsCurrency: true },
+  'USD/m²':      { baseCurrency: 'USD', denom: '/m²',  allowsCurrency: true },
+  'USD/trip':    { baseCurrency: 'USD', denom: '/회',  allowsCurrency: true },
+  'USD/yr':      { baseCurrency: 'USD', denom: '/년',  allowsCurrency: true },
+  'MNT/ton':     { baseCurrency: 'MNT', denom: '/ton', allowsCurrency: true },
+  'MNT/kWh':     { baseCurrency: 'MNT', denom: '/kWh', allowsCurrency: true },
+  '% of CAPEX':  { baseCurrency: null,  denom: '',     allowsCurrency: false },  // 단순 %
 };
+const CURRENCIES = ['USD', 'KRW', 'MNT'];
 
-// 헬퍼: parent 단위·값에 맞는 스마트 표시 단위 scale
-function _smartScale(parentUnit, value) {
-  const opts = UNIT_OPTIONS[parentUnit] || [{ scale: 1 }];
-  if (!Number.isFinite(value) || value === 0) return opts[0].scale;
-  const absV = Math.abs(value);
-  let best = opts[0].scale;
-  for (const opt of opts) {
-    if (absV / opt.scale >= 1) best = opt.scale;
-  }
-  return best;
+// FX 변환: from 통화 단위로 표시된 값을 to 통화 단위로 환산
+function fxFactor(fromCcy, toCcy, p) {
+  if (fromCcy === toCcy) return 1;
+  // USD 기준으로 환산: amount_in_USD = value / fx_usd_X, 그 다음 USD → toCcy
+  const toUsd = { USD: 1, KRW: 1 / (p.fx_usd_krw || 1370), MNT: 1 / (p.fx_usd_mnt || 3420) };
+  const usdTo = { USD: 1, KRW: (p.fx_usd_krw || 1370), MNT: (p.fx_usd_mnt || 3420) };
+  return toUsd[fromCcy] * usdTo[toCcy];
 }
 
 // ============================================================
@@ -1905,13 +1882,13 @@ const BREAKDOWN_PRESETS = [
         const parentVal = p[key];
         const n = def.suggestedItems.length;
         const each = parentVal / n;
-        const smartScale = _smartScale(def.parentUnit, each);
+        const baseCcy = (PARENT_UNIT_INFO[def.parentUnit] || {}).baseCurrency || 'USD';
         bd[key] = {
           enabled: true,
           items: def.suggestedItems.map(s => ({
             name_ko: s.name_ko, name_en: s.name_en,
             mode: 'simple', value: each,
-            valueUnit: smartScale,
+            valueCurrency: baseCcy,
             unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
           })),
         };
@@ -1933,13 +1910,13 @@ const BREAKDOWN_PRESETS = [
         const parentVal = p[key];
         const n = def.suggestedItems.length;
         const each = parentVal / n;
-        const smartScale = _smartScale(def.parentUnit, each);
+        const baseCcy = (PARENT_UNIT_INFO[def.parentUnit] || {}).baseCurrency || 'USD';
         bd[key] = {
           enabled: true,
           items: def.suggestedItems.map(s => ({
             name_ko: s.name_ko, name_en: s.name_en,
             mode: 'simple', value: each,
-            valueUnit: smartScale,
+            valueCurrency: baseCcy,
             unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
           })),
         };
@@ -1961,13 +1938,13 @@ const BREAKDOWN_PRESETS = [
         const parentVal = p[key];
         const n = def.suggestedItems.length;
         const each = parentVal / n;
-        const smartScale = _smartScale(def.parentUnit, each);
+        const baseCcy = (PARENT_UNIT_INFO[def.parentUnit] || {}).baseCurrency || 'USD';
         bd[key] = {
           enabled: true,
           items: def.suggestedItems.map(s => ({
             name_ko: s.name_ko, name_en: s.name_en,
             mode: 'simple', value: each,
-            valueUnit: smartScale,
+            valueCurrency: baseCcy,
             unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
           })),
         };
@@ -2686,53 +2663,47 @@ function simulator() {
     openCostEditor() { this.costEditorOpen = true; },
     closeCostEditor() { this.costEditorOpen = false; },
 
-    // 단위 옵션 + 스마트 기본값
-    unitOptions(parentUnit) {
-      return UNIT_OPTIONS[parentUnit] || [{ scale: 1, label_ko: parentUnit, label_en: parentUnit }];
+    // parent 단위 메타데이터
+    parentUnitInfo(parentUnit) {
+      return PARENT_UNIT_INFO[parentUnit] || { baseCurrency: null, denom: '', allowsCurrency: false };
     },
-    smartDefaultUnit(parentUnit, value) {
-      const opts = this.unitOptions(parentUnit);
-      if (!Number.isFinite(value) || value === 0) return opts[0].scale;
-      const absV = Math.abs(value);
-      // displayed >= 1 인 가장 큰 scale 선택 (가독성↑)
-      let best = opts[0].scale;
-      for (const opt of opts) {
-        if (absV / opt.scale >= 1) best = opt.scale;
-      }
-      return best;
+    currencyOptions() { return CURRENCIES; },
+    defaultCurrency(parentUnit) {
+      return this.parentUnitInfo(parentUnit).baseCurrency || 'USD';
     },
     // 3-digit comma 포맷
     formatNumber(v) {
       if (v === undefined || v === null || isNaN(v)) return '';
       const n = Number(v);
       if (n === 0) return '0';
-      // 매우 작은 값(< 0.01)은 유효숫자 6자리, 큰 값은 소수점 6자리
-      if (Math.abs(n) >= 1) {
-        return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
-      }
+      if (Math.abs(n) >= 1) return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
       return n.toLocaleString(undefined, { maximumSignificantDigits: 6 });
     },
     parseNumber(s) {
       if (typeof s !== 'string') return Number(s) || 0;
-      // 쉼표 제거 후 파싱. 빈 문자열·잘못된 입력은 0.
       const cleaned = s.replace(/,/g, '').trim();
       const n = parseFloat(cleaned);
       return Number.isFinite(n) ? n : 0;
     },
-    // 단위 적용 표시·파싱 (저장은 parent 단위, 표시·입력은 사용자 scale)
-    formatScaled(value, scale) {
-      return this.formatNumber((value || 0) / (scale || 1));
-    },
-    parseScaled(s, scale) {
-      return this.parseNumber(s) * (scale || 1);
-    },
-    // sub-item의 valueUnit 보장 (없으면 스마트 기본값 부여)
-    ensureUnit(item, parentUnit) {
-      if (!item.valueUnit) {
-        const ref = item.mode === 'formula' ? ((item.unitCost || 0) * (item.quantity || 0)) : (item.value || 0);
-        item.valueUnit = this.smartDefaultUnit(parentUnit, ref || 1);
+    // 통화 적용 표시·파싱 (저장은 parent 통화, 표시·입력은 사용자 통화)
+    displayValueIn(stored, parentUnit, ccy) {
+      const info = this.parentUnitInfo(parentUnit);
+      if (!info.allowsCurrency) {
+        // "% of CAPEX" 같은 경우: stored × 100 = 표시 (예: 0.02 → 2)
+        return this.formatNumber((stored || 0) * 100);
       }
-      return item.valueUnit;
+      const fromCcy = info.baseCurrency;
+      const toCcy = ccy || fromCcy;
+      return this.formatNumber((stored || 0) * fxFactor(fromCcy, toCcy, this.p));
+    },
+    parseValueFrom(s, parentUnit, ccy) {
+      const info = this.parentUnitInfo(parentUnit);
+      if (!info.allowsCurrency) {
+        return this.parseNumber(s) / 100;
+      }
+      const toCcy = info.baseCurrency;
+      const fromCcy = ccy || toCcy;
+      return this.parseNumber(s) * fxFactor(fromCcy, toCcy, this.p);
     },
 
     breakdownActive(key) {
@@ -2833,7 +2804,7 @@ function simulator() {
         items: [{
           name_ko: '항목 1', name_en: 'Item 1',
           mode: 'simple', value: 0,
-          valueUnit: _smartScale(f.unit, 0),
+          valueCurrency: (PARENT_UNIT_INFO[f.unit] || {}).baseCurrency || 'USD',
           unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
         }],
       };
@@ -2863,15 +2834,15 @@ function simulator() {
       const parentVal = this.p[key];
       const n = def.suggestedItems.length;
       const each = parentVal / n;
-      const smartScale = this.smartDefaultUnit(def.parentUnit, each);
+      const defaultCcy = this.defaultCurrency(def.parentUnit);
       this.breakdowns[key] = {
         enabled: true,
         items: def.suggestedItems.map(s => ({
           name_ko: s.name_ko,
           name_en: s.name_en,
           mode: 'simple',
-          value: each,
-          valueUnit: smartScale,        // 표시 단위 (저장은 parent 단위)
+          value: each,                  // 항상 parent 단위로 저장
+          valueCurrency: defaultCcy,    // 표시·입력 통화 (USD/KRW/MNT)
           unitCost: 0,
           quantity: 0,
           unitLabel_ko: '',
@@ -2904,15 +2875,15 @@ function simulator() {
     addSubItem(key) {
       const b = this.breakdowns[key];
       if (!b) return;
-      // 직전 sub-item의 단위를 상속, 없으면 parent 단위 (scale=1)
+      // 직전 sub-item의 통화 상속, 없으면 parent base 통화
       const def = this.bdDef(key);
-      const inheritUnit = b.items.length > 0
-        ? b.items[b.items.length - 1].valueUnit
-        : this.unitOptions(def.parentUnit)[0].scale;
+      const inheritCcy = b.items.length > 0
+        ? (b.items[b.items.length - 1].valueCurrency || this.defaultCurrency(def.parentUnit))
+        : this.defaultCurrency(def.parentUnit);
       b.items.push({
         name_ko: '신규 항목', name_en: 'New item',
         mode: 'simple', value: 0,
-        valueUnit: inheritUnit,
+        valueCurrency: inheritCcy,
         unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
       });
       this.saveBreakdowns();
