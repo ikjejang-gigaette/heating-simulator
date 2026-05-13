@@ -415,6 +415,109 @@
     background: var(--accent); color: white; border-color: var(--accent);
   }
 
+  /* Cost editor specific / 비용 편집 모달 전용 */
+  .cost-item {
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    margin-bottom: 12px;
+    background: var(--panel);
+  }
+  .cost-item.active { border-color: var(--accent); }
+  .cost-item-header {
+    padding: 10px 12px;
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  .cost-item-header.collapsed { border-bottom: none; }
+  .cost-item-title {
+    font-weight: 600;
+    font-size: 13px;
+  }
+  .cost-item-title .unit-hint {
+    color: var(--muted); font-weight: normal; font-size: 11px; margin-left: 6px;
+  }
+  .cost-item-status {
+    font-size: 10px; padding: 2px 6px; border-radius: 3px;
+  }
+  .cost-item-status.on { background: #e6f4ea; color: var(--good); }
+  .cost-item-status.off { background: var(--bg); color: var(--muted); }
+  .cost-item-actions { display: flex; gap: 6px; }
+  .cost-item-actions button {
+    padding: 3px 10px; font-size: 11px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--panel); border-radius: 3px;
+  }
+  .cost-item-actions button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+  .cost-item-actions button.danger { background: #fce8e6; color: var(--bad); border-color: #f5b7b1; }
+  .cost-item-body { padding: 8px 12px; }
+  .cost-subitem {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: 6px;
+    padding: 6px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: 12px;
+    align-items: center;
+  }
+  .cost-subitem:last-child { border-bottom: none; }
+  .cost-subitem input[type=text] {
+    padding: 3px 6px; font-size: 11px;
+    border: 1px solid var(--border); border-radius: 3px;
+    width: 100%;
+  }
+  .cost-subitem input[type=number] {
+    padding: 3px 6px; font-size: 11px;
+    border: 1px solid var(--border); border-radius: 3px;
+    width: 110px; text-align: right;
+  }
+  .cost-subitem .mode-btn {
+    padding: 2px 8px; font-size: 10px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg); border-radius: 3px;
+    white-space: nowrap;
+  }
+  .cost-subitem .mode-btn.active {
+    background: var(--accent-soft); color: var(--accent); border-color: var(--accent);
+  }
+  .cost-subitem .remove-btn {
+    padding: 2px 8px; font-size: 11px; cursor: pointer;
+    border: 1px solid #f5b7b1; background: #fce8e6; color: var(--bad);
+    border-radius: 3px;
+  }
+  .cost-subitem .formula-row {
+    grid-column: 1 / -1;
+    display: flex; gap: 4px; align-items: center;
+    padding: 4px 0 4px 12px;
+    font-size: 11px; color: var(--muted);
+  }
+  .cost-subitem .formula-row input[type=text] { width: 70px; }
+  .cost-subitem .formula-row input[type=number] { width: 90px; }
+  .cost-add-btn {
+    width: 100%; padding: 6px; margin-top: 6px;
+    border: 1px dashed var(--border); background: var(--bg);
+    cursor: pointer; font-size: 11px; color: var(--muted); border-radius: 3px;
+  }
+  .cost-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .cost-sum-bar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 12px; margin-top: 6px;
+    background: var(--accent-soft); border-radius: 3px;
+    font-size: 12px;
+  }
+  .cost-sum-bar .sum-label { color: var(--muted); }
+  .cost-sum-bar .sum-value { font-weight: 700; color: var(--accent); }
+  .cost-managed-pill {
+    display: inline-block;
+    padding: 1px 6px;
+    font-size: 9px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    border-radius: 8px;
+    margin-left: 4px;
+    cursor: pointer;
+  }
+  .cost-managed-pill:hover { background: var(--accent); color: white; }
+
   @media print {
     body { background: white; }
     header.app .toggle-group, header.app .action-btn,
@@ -454,6 +557,10 @@
     </div>
 
     <button class="action-btn" @click="openTutorial()" x-text="'📖 ' + t('tutorial')"></button>
+    <button class="action-btn"
+            @click="openCostEditor()"
+            x-text="'🛠️ ' + t('costEditor')"
+            :title="t('costEditorTip')"></button>
     <button class="action-btn"
             :style="testMode ? 'background:var(--warn)' : 'background:var(--muted)'"
             @click="toggleTestMode()"
@@ -510,7 +617,7 @@
       <details>
         <summary class="group-title" style="margin-top:12px;"><span x-text="t('tier2')"></span></summary>
         <template x-for="key in tier2Keys" :key="key">
-          <div class="slider-row">
+          <div class="slider-row" x-show="!breakdownActive(key)">
             <label>
               <span x-text="paramLabel(key)"></span>
               <span class="unit" x-text="param(key).unit ? '('+param(key).unit+')' : ''"></span>
@@ -523,12 +630,23 @@
                    x-model.number="p[key]" @change="recompute()">
           </div>
         </template>
+        <!-- 분해된 항목은 안내만 표시 -->
+        <template x-for="key in tier2Keys" :key="'bd-'+key">
+          <div class="slider-row" x-show="breakdownActive(key)" style="background:var(--accent-soft); border-radius:3px; padding:6px;">
+            <label>
+              <span x-text="paramLabel(key)"></span>
+              <span class="cost-managed-pill" @click="openCostEditor()" x-text="'🛠️ ' + t('costManagedByEditor')"></span>
+            </label>
+            <span style="grid-column: 1 / -1; font-size: 11px; color: var(--muted);"
+                  x-text="t('costEffectiveValue') + ': ' + breakdownSum(key).toLocaleString() + ' ' + (bdDef(key)?.parentUnit || '')"></span>
+          </div>
+        </template>
       </details>
 
       <details>
         <summary class="group-title" style="margin-top:12px;"><span x-text="t('tier3')"></span></summary>
         <template x-for="key in tier3Keys" :key="key">
-          <div class="slider-row">
+          <div class="slider-row" x-show="!breakdownActive(key)">
             <label>
               <span x-text="paramLabel(key)"></span>
               <span class="unit" x-text="param(key).unit ? '('+param(key).unit+')' : ''"></span>
@@ -540,6 +658,18 @@
             <input type="number"
                    :min="param(key).min" :max="param(key).max" :step="param(key).step"
                    x-model.number="p[key]" @change="recompute()">
+          </div>
+        </template>
+        <!-- Tier 3 분해된 항목 안내 -->
+        <template x-for="key in tier3Keys" :key="'bd3-'+key">
+          <div class="slider-row" x-show="breakdownActive(key)" style="background:var(--accent-soft); border-radius:3px; padding:6px;">
+            <label>
+              <span x-text="paramLabel(key)"></span>
+              <span class="cell-ref" x-text="param(key).cell || ''"></span>
+              <span class="cost-managed-pill" @click="openCostEditor()" x-text="'🛠️ ' + t('costManagedByEditor')"></span>
+            </label>
+            <span style="grid-column: 1 / -1; font-size: 11px; color: var(--muted);"
+                  x-text="t('costEffectiveValue') + ': ' + breakdownSum(key).toLocaleString() + ' ' + (bdDef(key)?.parentUnit || '')"></span>
           </div>
         </template>
       </details>
@@ -717,6 +847,112 @@
     <span><span x-text="t('footerBuild')"></span> 2026-05-11</span>
   </footer>
 
+  <!-- Cost editor modal / 비용 편집 모달 -->
+  <template x-if="costEditorOpen">
+    <div class="modal-overlay" @click.self="closeCostEditor()">
+      <div class="modal">
+        <div class="modal-header">
+          <h2 x-text="'🛠️ ' + t('costEditorTitle')"></h2>
+          <button class="modal-close" @click="closeCostEditor()">✕</button>
+        </div>
+        <div class="modal-tabs">
+          <button :class="{active: costEditorTab === 'common'}" @click="costEditorTab = 'common'" x-text="t('costTabCommon')"></button>
+          <button :class="{active: costEditorTab === 'isotes'}" @click="costEditorTab = 'isotes'" x-text="t('costTabIsotes')"></button>
+          <button :class="{active: costEditorTab === 'pv'}"     @click="costEditorTab = 'pv'"     x-text="t('costTabPv')"></button>
+          <button :class="{active: costEditorTab === 'etc'}"    @click="costEditorTab = 'etc'"    x-text="t('costTabEtc')"></button>
+          <button :class="{active: costEditorTab === 'opex'}"   @click="costEditorTab = 'opex'"   x-text="t('costTabOpex')"></button>
+        </div>
+        <div class="modal-body">
+          <template x-for="key in itemsForTab(costEditorTab)" :key="key">
+            <div class="cost-item" :class="{active: breakdownActive(key)}">
+              <div class="cost-item-header" :class="{collapsed: !breakdownActive(key)}">
+                <div>
+                  <span class="cost-item-title" x-text="bdParentLabel(key)"></span>
+                  <span class="unit-hint" x-text="'(' + bdDef(key).parentUnit + ')'"></span>
+                  <span class="cost-item-status" :class="breakdownActive(key) ? 'on' : 'off'"
+                        x-text="breakdownActive(key) ? t('costBreakdownActive') : t('costNoBreakdown')"></span>
+                </div>
+                <div class="cost-item-actions">
+                  <template x-if="!breakdownActive(key)">
+                    <button class="primary" @click="toggleBreakdown(key)" x-text="t('costEnableBreakdown')"></button>
+                  </template>
+                  <template x-if="breakdownActive(key)">
+                    <button @click="toggleBreakdown(key)" x-text="t('costDisableBreakdown')"></button>
+                  </template>
+                  <template x-if="breakdowns[key]">
+                    <button class="danger" @click="resetBreakdown(key)" x-text="t('costReset')"></button>
+                  </template>
+                </div>
+              </div>
+              <template x-if="breakdownActive(key)">
+                <div class="cost-item-body">
+                  <template x-for="(item, idx) in breakdowns[key].items" :key="idx">
+                    <div class="cost-subitem">
+                      <input type="text"
+                             :value="bdItemName(item)"
+                             @input="(p.lang==='ko' ? item.name_ko = $event.target.value : item.name_en = $event.target.value); onSubItemEdit()"
+                             :placeholder="t('costSubName')">
+                      <template x-if="item.mode === 'simple'">
+                        <input type="number" step="any"
+                               x-model.number="item.value"
+                               @input="onSubItemEdit()">
+                      </template>
+                      <template x-if="item.mode === 'formula'">
+                        <span style="font-size:11px;color:var(--muted);" x-text="((item.unitCost||0)*(item.quantity||0)).toLocaleString()"></span>
+                      </template>
+                      <div style="display:flex; gap:4px;">
+                        <button class="mode-btn" :class="{active: item.mode === 'simple'}"
+                                @click="if(item.mode!=='simple') toggleSubItemMode(key, idx)"
+                                x-text="t('costModeSimple')"></button>
+                        <button class="mode-btn" :class="{active: item.mode === 'formula'}"
+                                @click="if(item.mode!=='formula') toggleSubItemMode(key, idx)"
+                                x-text="t('costModeFormula')"></button>
+                        <button class="remove-btn" @click="removeSubItem(key, idx)" :title="t('costRemoveItem')">×</button>
+                      </div>
+                      <template x-if="item.mode === 'formula'">
+                        <div class="formula-row">
+                          <span x-text="t('costUnitCost') + ':'"></span>
+                          <input type="number" step="any" x-model.number="item.unitCost" @input="onSubItemEdit()">
+                          <span>×</span>
+                          <span x-text="t('costQuantity') + ':'"></span>
+                          <input type="number" step="any" x-model.number="item.quantity" @input="onSubItemEdit()">
+                          <input type="text" x-model="item['unitLabel_'+(p.lang||'ko')]" @input="onSubItemEdit()"
+                                 :placeholder="t('costUnitLabel')">
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                  <button class="cost-add-btn" @click="addSubItem(key)" x-text="t('costAddItem')"></button>
+                  <div class="cost-sum-bar">
+                    <span>
+                      <span class="sum-label" x-text="t('costParentValue') + ': '"></span>
+                      <span x-text="p[key].toLocaleString() + ' ' + bdDef(key).parentUnit"></span>
+                    </span>
+                    <span>
+                      <span class="sum-label" x-text="t('costSum') + ': '"></span>
+                      <span class="sum-value" x-text="breakdownSum(key).toLocaleString() + ' ' + bdDef(key).parentUnit"></span>
+                    </span>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+        <div class="modal-footer">
+          <div style="font-size: 11px; color: var(--muted);" x-text="'💾 ' + (p.lang==='ko' ? '변경 시 자동 저장 (localStorage)' : 'Auto-saved to localStorage on every edit')"></div>
+          <div class="btn-group">
+            <button @click="exportBreakdowns()" x-text="'⬇ ' + t('costExport')"></button>
+            <label class="primary" style="padding: 6px 14px; border: 1px solid var(--accent); background: var(--accent); color: white; cursor: pointer; border-radius: 4px; font-size: 12px;">
+              <span x-text="'⬆ ' + t('costImport')"></span>
+              <input type="file" accept="application/json" style="display:none" @change="importBreakdowns($event)">
+            </label>
+            <button class="primary" @click="closeCostEditor()" x-text="t('tutClose')"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+
   <!-- Tutorial modal / 튜토리얼 모달 -->
   <template x-if="tutorialOpen">
     <div class="modal-overlay" @click.self="closeTutorial()">
@@ -850,6 +1086,36 @@ const TRANSLATIONS = {
     tabFaq: 'Q&A',
     verifyBtn: '검증',
     verifyBtnTip: 'JS 계산 결과를 Excel 기준값과 비교 (5% 허용 오차)',
+    costEditor: '비용 편집',
+    costEditorTitle: '비용 항목 편집기',
+    costEditorTip: 'CAPEX/OPEX 항목을 세분화해 bottom-up 추정',
+    costTabCommon: '공통 인프라',
+    costTabIsotes: 'IsoTES',
+    costTabPv: '태양광 PV',
+    costTabEtc: '태양열 ETC',
+    costTabOpex: '운영비 단가',
+    costEnableBreakdown: '분해 시작',
+    costDisableBreakdown: '분해 비활성',
+    costAddItem: '+ 항목 추가',
+    costRemoveItem: '삭제',
+    costSum: '합계',
+    costSumMatch: '슬라이더 값과 일치',
+    costSumDiff: '차이',
+    costModeSimple: '단순',
+    costModeFormula: '단가×수량',
+    costSubName: '항목 이름',
+    costUnitCost: '단가',
+    costQuantity: '수량',
+    costUnitLabel: '단위',
+    costParentValue: '슬라이더 값',
+    costEffectiveValue: '유효 값 (계산 사용)',
+    costExport: '내보내기',
+    costImport: '가져오기',
+    costReset: '이 항목 초기화',
+    costManagedByEditor: '편집기에서 관리 중',
+    costClickToEdit: '클릭하여 편집',
+    costNoBreakdown: '분해 없음 (단순 값 사용)',
+    costBreakdownActive: '분해 활성',
   },
   en: {
     title: 'GIGAette Mongolia Heating Business Viability Simulator',
@@ -936,13 +1202,58 @@ const TRANSLATIONS = {
     tabFaq: 'FAQ',
     verifyBtn: 'Verify',
     verifyBtnTip: 'Compare JS results vs Excel reference (5% tolerance)',
+    costEditor: 'Cost Editor',
+    costEditorTitle: 'Cost Item Editor',
+    costEditorTip: 'Sub-decompose CAPEX/OPEX items for bottom-up estimation',
+    costTabCommon: 'Common',
+    costTabIsotes: 'IsoTES',
+    costTabPv: 'Solar PV',
+    costTabEtc: 'Solar ETC',
+    costTabOpex: 'OPEX rates',
+    costEnableBreakdown: 'Start breakdown',
+    costDisableBreakdown: 'Disable breakdown',
+    costAddItem: '+ Add item',
+    costRemoveItem: 'Remove',
+    costSum: 'Sum',
+    costSumMatch: 'matches slider',
+    costSumDiff: 'difference',
+    costModeSimple: 'Simple',
+    costModeFormula: 'Unit × Qty',
+    costSubName: 'Item name',
+    costUnitCost: 'Unit cost',
+    costQuantity: 'Quantity',
+    costUnitLabel: 'Unit',
+    costParentValue: 'Slider value',
+    costEffectiveValue: 'Effective value (used in calc)',
+    costExport: 'Export',
+    costImport: 'Import',
+    costReset: 'Reset this item',
+    costManagedByEditor: 'Managed in editor',
+    costClickToEdit: 'Click to edit',
+    costNoBreakdown: 'No breakdown (simple value)',
+    costBreakdownActive: 'Breakdown active',
   }
 };
 
 // ============================================================
 // Core computation / 핵심 계산
 // ============================================================
-function compute(p) {
+// Effective-value helper: breakdown sum if active, else p[key]
+function _itemValue(item) {
+  return item.mode === 'formula'
+    ? (item.unitCost || 0) * (item.quantity || 0)
+    : (item.value || 0);
+}
+function effectiveValue(p, bd, key) {
+  const b = bd && bd[key];
+  if (b && b.enabled && b.items && b.items.length > 0) {
+    return b.items.reduce((s, i) => s + _itemValue(i), 0);
+  }
+  return p[key];
+}
+
+function compute(p, bd) {
+  const eff = (k) => effectiveValue(p, bd, k);
   const fx = p.ccy === 'USD' ? 1 : p.ccy === 'MNT' ? p.fx_usd_mnt : p.fx_usd_krw;
   const scale = p.mode === 'scale' ? (p.target_cap / 1.5) : 1.0;
 
@@ -951,27 +1262,27 @@ function compute(p) {
   const elecKwhYr  = (p.daily_mj / 3.6) / p.elec_eff * p.heating_days * scale;
   const coalTonYr  = annualMJ / p.coal_eff / p.coal_hhv / 1000;
 
-  const coalLow_mnt  = p.coal_low_mnt  * p.coal_price_mult;
-  const coalHigh_mnt = p.coal_high_mnt * p.coal_price_mult;
+  const coalLow_mnt  = eff('coal_low_mnt')  * p.coal_price_mult;
+  const coalHigh_mnt = eff('coal_high_mnt') * p.coal_price_mult;
   const coalFuelUsd  = coalTonYr * (coalLow_mnt + coalHigh_mnt) / 2 / p.fx_usd_mnt;
-  const transportUsd = p.transport_usd * p.trips_yr * scale;
-  const coalMaintUsd = p.coal_only * 0.04 * scale;
+  const transportUsd = eff('transport_usd') * p.trips_yr * scale;
+  const coalMaintUsd = eff('coal_only') * 0.04 * scale;
   const coalAnnUsd   = coalFuelUsd + transportUsd + coalMaintUsd;
 
-  const capexCoalUsd = (p.common_infra + p.coal_only) * Math.pow(scale, p.scale_exp);
-  const capexIsotesBaseUsd = (p.capex_system_krw + p.capex_logistics_krw + p.capex_install_krw) / p.fx_usd_krw;
+  const capexCoalUsd = (eff('common_infra') + eff('coal_only')) * Math.pow(scale, p.scale_exp);
+  const capexIsotesBaseUsd = (eff('capex_system_krw') + eff('capex_logistics_krw') + eff('capex_install_krw')) / p.fx_usd_krw;
   const capexIsotesUsd = capexIsotesBaseUsd * Math.pow(scale, p.scale_exp);
 
   const pvKwp = (p.daily_mj / 3.6) / p.elec_eff / p.solar_irrad * scale;
-  const capexPvAddUsd = pvKwp * 1000 * (p.pv_module + p.pv_inverter + p.pv_install);
+  const capexPvAddUsd = pvKwp * 1000 * (eff('pv_module') + eff('pv_inverter') + eff('pv_install'));
   const capexPvUsd = capexIsotesUsd + capexPvAddUsd;
 
   const etcM2 = (p.daily_mj / 3.6) / p.elec_eff / p.solar_irrad / p.etc_eff * scale;
-  const capexEtcAddUsd = etcM2 * (p.etc_tube + p.etc_mount + p.etc_circuit);
+  const capexEtcAddUsd = etcM2 * (eff('etc_tube') + eff('etc_mount') + eff('etc_circuit'));
   const capexEtcUsd = capexIsotesUsd + capexEtcAddUsd;
 
-  const elecRateDisc = p.night_rate_mnt * (1 - p.night_disc) / p.fx_usd_mnt;
-  const elecRateFull = p.night_rate_mnt / p.fx_usd_mnt;
+  const elecRateDisc = eff('night_rate_mnt') * (1 - p.night_disc) / p.fx_usd_mnt;
+  const elecRateFull = eff('night_rate_mnt') / p.fx_usd_mnt;
   const isotesAnnUsd = elecKwhYr * elecRateDisc + capexIsotesUsd * p.opex_pct;
   const pvAnnUsd  = elecKwhYr * (1 - p.pv_cover)  * elecRateFull + capexPvUsd  * p.opex_pct;
   const etcAnnUsd = elecKwhYr * (1 - p.etc_cover) * elecRateFull + capexEtcUsd * p.opex_pct;
@@ -1162,6 +1473,132 @@ const PRESETS = [
     desc_ko: 'EU ETS + 대규모 + ETC 85%', desc_en: 'EU ETS + large + ETC 85%',
     changes: { mode: 'scale', target_cap: 500, carbon_on: true, carbon_price: 150, etc_cover: 0.85 } },
 ];
+
+// ============================================================
+// Breakdown definitions — 15 items that can be sub-decomposed
+// (CAPEX 11 + OPEX 4). User-defined values stored in localStorage.
+// ============================================================
+const BREAKDOWN_DEFS = {
+  // === CAPEX — 공통 ===
+  common_infra: { tab: 'common', parentUnit: 'USD',
+    parentLabel_ko: '공통 인프라', parentLabel_en: 'Common infrastructure',
+    suggestedItems: [
+      { name_ko: '난방 배관·라디에이터', name_en: 'Pipes & radiators' },
+      { name_ko: '보일러실 건축', name_en: 'Boiler room construction' },
+      { name_ko: '전기 인입·배전', name_en: 'Electrical entry & distribution' },
+    ]},
+  coal_only: { tab: 'common', parentUnit: 'USD',
+    parentLabel_ko: '갈탄 전용 CAPEX', parentLabel_en: 'Coal-specific CAPEX',
+    suggestedItems: [
+      { name_ko: '보일러 본체', name_en: 'Boiler unit' },
+      { name_ko: '갈탄 저장소', name_en: 'Coal storage' },
+      { name_ko: '연돌', name_en: 'Chimney' },
+      { name_ko: '재처리·청소', name_en: 'Ash handling' },
+    ]},
+  // === CAPEX — IsoTES ===
+  capex_system_krw: { tab: 'isotes', parentUnit: 'KRW',
+    parentLabel_ko: '시스템 위탁제작 (B29)', parentLabel_en: 'System subcontract (B29)',
+    suggestedItems: [
+      { name_ko: '압력탱크 본체', name_en: 'Pressure tank' },
+      { name_ko: '전열 히터', name_en: 'Electric heater' },
+      { name_ko: '제어 시스템', name_en: 'Control system' },
+      { name_ko: '단열재', name_en: 'Insulation' },
+    ]},
+  capex_logistics_krw: { tab: 'isotes', parentUnit: 'KRW',
+    parentLabel_ko: '국제 운송·통관 (B30)', parentLabel_en: 'Int\'l logistics (B30)',
+    suggestedItems: [
+      { name_ko: '해운 운임', name_en: 'Ocean freight' },
+      { name_ko: '통관 수수료', name_en: 'Customs' },
+      { name_ko: '국내 운송', name_en: 'Domestic transport (Korea)' },
+      { name_ko: '몽골 내륙 운송', name_en: 'Mongolia transport' },
+    ]},
+  capex_install_krw: { tab: 'isotes', parentUnit: 'KRW',
+    parentLabel_ko: '몽골 현지 설치 (B31)', parentLabel_en: 'Mongolia install (B31)',
+    suggestedItems: [
+      { name_ko: '압력탱크 현지 제작', name_en: 'Local pressure tank fab' },
+      { name_ko: '기초 공사', name_en: 'Foundation' },
+      { name_ko: '인건비', name_en: 'Labor' },
+      { name_ko: '시운전', name_en: 'Commissioning' },
+      { name_ko: '모니터링 장비', name_en: 'Monitoring equipment' },
+    ]},
+  // === CAPEX — PV ===
+  pv_module: { tab: 'pv', parentUnit: 'USD/Wp',
+    parentLabel_ko: 'PV 모듈 (B73)', parentLabel_en: 'PV module (B73)',
+    suggestedItems: [
+      { name_ko: '패널 단가', name_en: 'Panel base cost' },
+      { name_ko: '수입 관세', name_en: 'Import tariff' },
+      { name_ko: '환율·유통 마진', name_en: 'FX & distribution margin' },
+    ]},
+  pv_inverter: { tab: 'pv', parentUnit: 'USD/Wp',
+    parentLabel_ko: '인버터·BOS (B74)', parentLabel_en: 'Inverter & BOS (B74)',
+    suggestedItems: [
+      { name_ko: '스트링 인버터', name_en: 'String inverter' },
+      { name_ko: '케이블·결선', name_en: 'Cabling & connections' },
+      { name_ko: '접지·보호장치', name_en: 'Grounding & protection' },
+    ]},
+  pv_install: { tab: 'pv', parentUnit: 'USD/Wp',
+    parentLabel_ko: 'PV 설치 (B75)', parentLabel_en: 'PV installation (B75)',
+    suggestedItems: [
+      { name_ko: '가대 자재', name_en: 'Mounting frame' },
+      { name_ko: '기초 공사', name_en: 'Foundation' },
+      { name_ko: '설치 인건비', name_en: 'Installation labor' },
+      { name_ko: '전기 공사', name_en: 'Electrical work' },
+    ]},
+  // === CAPEX — ETC ===
+  etc_tube: { tab: 'etc', parentUnit: 'USD/m²',
+    parentLabel_ko: 'ETC 진공관 (B79)', parentLabel_en: 'ETC evacuated tube (B79)',
+    suggestedItems: [
+      { name_ko: '집열관 본체', name_en: 'Collector body' },
+      { name_ko: '헤더 매니폴드', name_en: 'Header manifold' },
+      { name_ko: '흡열판', name_en: 'Absorber plate' },
+      { name_ko: '선택성 코팅', name_en: 'Selective coating' },
+    ]},
+  etc_mount: { tab: 'etc', parentUnit: 'USD/m²',
+    parentLabel_ko: 'ETC 가대 (B80)', parentLabel_en: 'ETC mounting (B80)',
+    suggestedItems: [
+      { name_ko: '가대 자재', name_en: 'Mounting frame' },
+      { name_ko: '기초·앵커', name_en: 'Foundation & anchors' },
+      { name_ko: '설치 인건비', name_en: 'Installation labor' },
+    ]},
+  etc_circuit: { tab: 'etc', parentUnit: 'USD/m²',
+    parentLabel_ko: 'ETC 순환계 (B81)', parentLabel_en: 'ETC solar circuit (B81)',
+    suggestedItems: [
+      { name_ko: '순환펌프', name_en: 'Circulation pump' },
+      { name_ko: '열교환기', name_en: 'Heat exchanger' },
+      { name_ko: '차압변·제어', name_en: 'Differential valve & control' },
+      { name_ko: '부동액', name_en: 'Antifreeze fluid' },
+    ]},
+  // === OPEX 단가 ===
+  transport_usd: { tab: 'opex', parentUnit: 'USD/trip',
+    parentLabel_ko: '운송 단가 (B22)', parentLabel_en: 'Transport unit cost (B22)',
+    suggestedItems: [
+      { name_ko: '트럭 임차료', name_en: 'Truck rental' },
+      { name_ko: '연료비', name_en: 'Fuel' },
+      { name_ko: '운전 인건비', name_en: 'Driver labor' },
+      { name_ko: '보험·기타', name_en: 'Insurance & misc' },
+    ]},
+  coal_low_mnt: { tab: 'opex', parentUnit: 'MNT/ton',
+    parentLabel_ko: '갈탄 단가 (저, B19)', parentLabel_en: 'Coal price (low, B19)',
+    suggestedItems: [
+      { name_ko: '광산 원료', name_en: 'Mine raw material' },
+      { name_ko: '광산→유통 운반', name_en: 'Mine-to-distributor haul' },
+      { name_ko: '유통 마진·세금', name_en: 'Distributor margin & tax' },
+    ]},
+  coal_high_mnt: { tab: 'opex', parentUnit: 'MNT/ton',
+    parentLabel_ko: '갈탄 단가 (고, B20)', parentLabel_en: 'Coal price (high, B20)',
+    suggestedItems: [
+      { name_ko: '광산 원료', name_en: 'Mine raw material' },
+      { name_ko: '광산→유통 운반', name_en: 'Mine-to-distributor haul' },
+      { name_ko: '유통 마진·세금', name_en: 'Distributor margin & tax' },
+    ]},
+  night_rate_mnt: { tab: 'opex', parentUnit: 'MNT/kWh',
+    parentLabel_ko: '심야 전력 정상가 (B24)', parentLabel_en: 'Night electricity rate (B24)',
+    suggestedItems: [
+      { name_ko: '발전 원가', name_en: 'Generation cost' },
+      { name_ko: '송배전 비용', name_en: 'Transmission & distribution' },
+      { name_ko: '세금·부과금', name_en: 'Tax & surcharge' },
+    ]},
+};
 
 // ============================================================
 // Tutorial content (bilingual, HTML strings)
@@ -1752,13 +2189,18 @@ function simulator() {
   return {
     p: {},
     r: { capex: {}, gross: {}, credit: {}, net: {}, lcoh: {}, payback: {}, npv: {}, co2: {} },
+    breakdowns: {},       // 사용자 정의 분해 (localStorage 영속)
     tier1Keys: [], tier2Keys: [], tier3Keys: [],
     activePreset: 0,
     testMode: false,
     testResults: [],
     chartsReady: false,
     _debounce: null,
+    _bdSaveDebounce: null,
     presets: PRESETS,
+    breakdownDefs: BREAKDOWN_DEFS,
+    costEditorOpen: false,
+    costEditorTab: 'common',  // 'common' | 'isotes' | 'pv' | 'etc' | 'opex'
     tutorialOpen: false,
     tutorialTab: 0,
     tutorialSkip: false,
@@ -1792,8 +2234,11 @@ function simulator() {
         document.documentElement.setAttribute('lang', langParam);
       }
 
+      // localStorage에서 분해 정의 복원 (있으면)
+      this.loadBreakdowns();
+
       // 초기 compute는 동기 실행 — 차트가 0으로 깜빡이는 것 방지
-      this.r = compute(this.p);
+      this.r = compute(this.p, this.breakdowns);
       // Robust chart init: wait for x-cloak removal + first paint + Chart.js ready.
       // setTimeout(0) → next macrotask after Alpine processes x-cloak.
       // requestAnimationFrame → after browser paint (canvas dimensions ready).
@@ -1819,6 +2264,171 @@ function simulator() {
         const seen = localStorage.getItem('gigaette_heatingsim_v2_tut_seen');
         if (!seen) this.openTutorial();
       } catch (e) { /* localStorage blocked (file://): silently skip */ }
+    },
+
+    // ===== Cost editor / 비용 편집기 =====
+    openCostEditor() { this.costEditorOpen = true; },
+    closeCostEditor() { this.costEditorOpen = false; },
+
+    breakdownActive(key) {
+      const b = this.breakdowns[key];
+      return !!(b && b.enabled && b.items && b.items.length > 0);
+    },
+    breakdownSum(key) {
+      const b = this.breakdowns[key];
+      if (!b || !b.items) return 0;
+      return b.items.reduce((s, it) => s + (it.mode === 'formula'
+        ? (it.unitCost || 0) * (it.quantity || 0)
+        : (it.value || 0)), 0);
+    },
+    itemsForTab(tabId) {
+      return Object.keys(BREAKDOWN_DEFS).filter(k => BREAKDOWN_DEFS[k].tab === tabId);
+    },
+    bdDef(key) { return BREAKDOWN_DEFS[key]; },
+    bdParentLabel(key) {
+      const def = BREAKDOWN_DEFS[key];
+      const lang = this.p.lang || 'ko';
+      return def['parentLabel_' + lang] || def.parentLabel_ko;
+    },
+    bdItemName(item) {
+      const lang = this.p.lang || 'ko';
+      return item['name_' + lang] || item.name_ko || item.name_en || '';
+    },
+
+    enableBreakdown(key) {
+      const def = BREAKDOWN_DEFS[key];
+      if (!def) return;
+      const parentVal = this.p[key];
+      const n = def.suggestedItems.length;
+      // 권장 sub-items를 시작값으로, 부모 값을 균등 분배
+      const each = parentVal / n;
+      this.breakdowns[key] = {
+        enabled: true,
+        items: def.suggestedItems.map(s => ({
+          name_ko: s.name_ko,
+          name_en: s.name_en,
+          mode: 'simple',
+          value: each,
+          // formula 모드용 (mode 전환 시 사용)
+          unitCost: 0,
+          quantity: 0,
+          unitLabel_ko: '',
+          unitLabel_en: '',
+        }))
+      };
+      this.saveBreakdowns();
+      this.recompute();
+    },
+    disableBreakdown(key) {
+      // 데이터는 유지 (다시 켜면 그대로). enabled만 false.
+      if (this.breakdowns[key]) {
+        this.breakdowns[key].enabled = false;
+        this.saveBreakdowns();
+        this.recompute();
+      }
+    },
+    toggleBreakdown(key) {
+      if (this.breakdownActive(key)) {
+        this.disableBreakdown(key);
+      } else if (this.breakdowns[key] && !this.breakdowns[key].enabled) {
+        // 이전 분해 데이터가 있으면 재활성화만
+        this.breakdowns[key].enabled = true;
+        this.saveBreakdowns();
+        this.recompute();
+      } else {
+        this.enableBreakdown(key);
+      }
+    },
+    addSubItem(key) {
+      const b = this.breakdowns[key];
+      if (!b) return;
+      b.items.push({
+        name_ko: '신규 항목', name_en: 'New item',
+        mode: 'simple', value: 0,
+        unitCost: 0, quantity: 0, unitLabel_ko: '', unitLabel_en: '',
+      });
+      this.saveBreakdowns();
+      this.recompute();
+    },
+    removeSubItem(key, idx) {
+      const b = this.breakdowns[key];
+      if (!b || !b.items) return;
+      b.items.splice(idx, 1);
+      if (b.items.length === 0) {
+        // 마지막 항목 삭제 시 분해 비활성화
+        b.enabled = false;
+      }
+      this.saveBreakdowns();
+      this.recompute();
+    },
+    toggleSubItemMode(key, idx) {
+      const it = this.breakdowns[key].items[idx];
+      if (it.mode === 'formula') {
+        // formula → simple: 현재 계산된 값을 그대로 단순 값으로
+        it.value = (it.unitCost || 0) * (it.quantity || 0);
+        it.mode = 'simple';
+      } else {
+        // simple → formula: 기본 단가/수량 세팅 (1 × value)
+        it.unitCost = it.value || 0;
+        it.quantity = 1;
+        it.unitLabel_ko = it.unitLabel_ko || '단위';
+        it.unitLabel_en = it.unitLabel_en || 'unit';
+        it.mode = 'formula';
+      }
+      this.saveBreakdowns();
+      this.recompute();
+    },
+    onSubItemEdit() {
+      // 모든 input edit 시 호출 (debounced save + recompute)
+      this.saveBreakdowns();
+      this.recompute();
+    },
+    resetBreakdown(key) {
+      delete this.breakdowns[key];
+      this.saveBreakdowns();
+      this.recompute();
+    },
+
+    saveBreakdowns() {
+      // localStorage 디바운스 저장
+      if (this._bdSaveDebounce) clearTimeout(this._bdSaveDebounce);
+      this._bdSaveDebounce = setTimeout(() => {
+        try { localStorage.setItem('gigaette_heatingsim_v2_breakdowns', JSON.stringify(this.breakdowns)); } catch (e) {}
+      }, 200);
+    },
+    loadBreakdowns() {
+      try {
+        const raw = localStorage.getItem('gigaette_heatingsim_v2_breakdowns');
+        if (raw) this.breakdowns = JSON.parse(raw) || {};
+      } catch (e) { this.breakdowns = {}; }
+    },
+
+    exportBreakdowns() {
+      const blob = new Blob([JSON.stringify(this.breakdowns, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'gigaette_breakdowns_' + new Date().toISOString().slice(0, 10) + '.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
+    importBreakdowns(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = JSON.parse(e.target.result);
+          if (typeof data !== 'object') throw new Error('invalid format');
+          this.breakdowns = data;
+          this.saveBreakdowns();
+          this.recompute();
+        } catch (err) {
+          alert((this.p.lang === 'en' ? 'Import failed: ' : '가져오기 실패: ') + err.message);
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = '';
     },
 
     openTutorial() {
@@ -1909,7 +2519,7 @@ function simulator() {
       // 50ms debounce — Chart.js update overhead 보호. 튜토리얼 문서와 동기화.
       if (this._debounce) clearTimeout(this._debounce);
       this._debounce = setTimeout(() => {
-        this.r = compute(this.p);
+        this.r = compute(this.p, this.breakdowns);
         this.updateCharts();
       }, 50);
     },
@@ -2065,7 +2675,7 @@ function simulator() {
         p.mode = 'poc'; p.ccy = 'USD'; p.carbon_on = false;
         Object.assign(p, t.p);
         if (p.mode === 'poc') p.target_cap = 1.5;
-        const out = compute(p);
+        const out = compute(p, {});   // 검증은 항상 분해 OFF 상태로 (기준값 검증)
         const checks = [
           ['Coal annual / 갈탄 연비용',     out.net.coal,    t.expect.coalAnn],
           ['IsoTES net / IsoTES 순비용', out.net.isotes,  t.expect.isotesNet],
