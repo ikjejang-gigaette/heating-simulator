@@ -197,10 +197,36 @@
   .kpi.good .kpi-value { color: var(--good); }
   .kpi.bad .kpi-value { color: var(--bad); }
 
+  /* 결과 영역: 표 (2/3) + 누적 차트 (1/3) 좌우 분할 */
+  .results-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 12px;
+    margin-bottom: 12px;
+    align-items: stretch;
+  }
+  @media (max-width: 1100px) {
+    .results-row { grid-template-columns: 1fr; }
+  }
+  .results-table-wrap { overflow-x: auto; }
+  .cumulative-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 10px;
+    display: flex; flex-direction: column;
+    min-height: 360px;
+  }
+  .cumulative-card h3 {
+    margin: 0 0 8px; font-size: 12px; color: var(--muted); font-weight: 600;
+  }
+  .cumulative-canvas-wrap {
+    position: relative; flex: 1; min-height: 300px;
+  }
   .results-table {
     width: 100%;
     border-collapse: collapse;
-    margin-bottom: 12px;
+    margin-bottom: 0;
     font-size: 12px;
   }
   .results-table th, .results-table td {
@@ -785,7 +811,9 @@
         </div>
       </div>
 
-      <!-- 4-tech comparison table / 4기술 비교 표 -->
+      <!-- 4기술 비교 표 + 누적 비용·수익 라인 차트 (2:1) -->
+      <div class="results-row">
+        <div class="results-table-wrap">
       <table class="results-table">
         <thead>
           <tr>
@@ -849,6 +877,12 @@
             <td x-text="r.co2.etc.toFixed(1)"></td></tr>
         </tbody>
       </table>
+        </div>
+        <div class="cumulative-card">
+          <h3 x-text="t('chartCumulative')"></h3>
+          <div class="cumulative-canvas-wrap"><canvas id="cumulativeChart"></canvas></div>
+        </div>
+      </div>
 
       <!-- Charts / 차트 -->
       <div class="chart-grid">
@@ -1262,6 +1296,10 @@ const TRANSLATIONS = {
     rowPaybackRel: '회수기간 (상대)',
     costTabRevenue: '수익 항목',
     chartPayback: '회수기간 비교',
+    chartCumulative: '누적 비용·수익 (15년, 비할인)',
+    cumulativeRevenue: '누적 매출',
+    cumulativeYearAxis: '연차 (year)',
+    cumulativeValueAxis: '누적 금액',
     tabRevenue: '수익 모델',
     chartLcoh: 'LCOH 비교 (낮을수록 경제적)',
     chartNpv: 'NPV (15년 누적, 양수=흑자/이득)',
@@ -1397,6 +1435,10 @@ const TRANSLATIONS = {
     rowPaybackRel: 'Payback (relative)',
     costTabRevenue: 'Revenue items',
     chartPayback: 'Payback comparison',
+    chartCumulative: 'Cumulative cost & revenue (15yr, undiscounted)',
+    cumulativeRevenue: 'Cumulative revenue',
+    cumulativeYearAxis: 'Year',
+    cumulativeValueAxis: 'Cumulative amount',
     tabRevenue: 'Revenue Model',
     chartLcoh: 'LCOH Comparison (lower = more economic)',
     chartNpv: 'NPV (15yr cumulative, positive = profit/gain)',
@@ -3462,7 +3504,8 @@ function simulator() {
         const npvEl  = document.getElementById('npvChart');
         const costEl = document.getElementById('costChart');
         const co2El  = document.getElementById('co2Chart');
-        if (!lcohEl || !npvEl || !costEl || !co2El) {
+        const cumEl  = document.getElementById('cumulativeChart');
+        if (!lcohEl || !npvEl || !costEl || !co2El || !cumEl) {
           console.error('[GIGAette] Chart canvas elements not found in DOM');
           return;
         }
@@ -3511,6 +3554,28 @@ function simulator() {
           options: makeOpts(true)
         });
 
+        // 누적 비용·수익 라인 차트 (15년, 비할인)
+        const cumData = this._buildCumulativeDatasets(colors, techLabels);
+        CHART_INSTANCES.cumulative = new Chart(cumEl, {
+          type: 'line',
+          data: { labels: cumData.years, datasets: cumData.datasets },
+          options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 14 } },
+              tooltip: { enabled: true,
+                callbacks: { title: (items) => 'Year ' + items[0].label } }
+            },
+            scales: {
+              x: { title: { display: true, text: this.t('cumulativeYearAxis'), font: { size: 10 } },
+                   ticks: { font: { size: 9 } } },
+              y: { title: { display: true, text: this.t('cumulativeValueAxis'), font: { size: 10 } },
+                   ticks: { font: { size: 9 } } }
+            }
+          }
+        });
+
         this.chartsReady = true;
         console.log('[GIGAette] Charts initialized successfully');
       } catch (e) {
@@ -3523,6 +3588,40 @@ function simulator() {
       if (v > 50) return 50;     // 차트 가시성: 50년 이상은 50으로 캡
       if (v < -50) return -50;
       return v;
+    },
+
+    _buildCumulativeDatasets(colors, techLabels) {
+      const r = this.r;
+      const n = this.p.lifetime || 15;
+      const years = Array.from({length: n + 1}, (_, i) => i);  // 0..n
+      const techKeys = ['coal', 'isotes', 'pv', 'etc'];
+      const techCcyColors = [colors.coal, colors.isotes, colors.pv, colors.etc];
+      const datasets = techKeys.map((tech, idx) => ({
+        label: techLabels[idx],
+        data: years.map(y => (r.capex?.[tech] || 0) + y * (r.net?.[tech] || 0)),
+        borderColor: techCcyColors[idx],
+        backgroundColor: techCcyColors[idx] + '20',
+        fill: false,
+        tension: 0,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        borderWidth: 2,
+      }));
+      // 누적 매출 (4기술 동일, 0년부터 선형 증가)
+      const revAnn = r.revenue?.coal || 0;
+      datasets.push({
+        label: this.t('cumulativeRevenue'),
+        data: years.map(y => y * revAnn),
+        borderColor: '#2156a5',
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        borderWidth: 3,
+        borderDash: [6, 4],
+      });
+      return { years, datasets };
     },
 
     updateCharts() {
@@ -3552,6 +3651,20 @@ function simulator() {
           this._cappedPayback(this.paybackForTech('pv')),
           this._cappedPayback(this.paybackForTech('etc')),
         ];
+
+        // 누적 비용·수익 라인 차트 갱신
+        if (CHART_INSTANCES.cumulative) {
+          const colors = { coal: '#d55e00', isotes: '#0072b2', pv: '#e6c200', etc: '#009e73' };
+          const cumData = this._buildCumulativeDatasets(colors, techLabels);
+          CHART_INSTANCES.cumulative.data.labels = cumData.years;
+          CHART_INSTANCES.cumulative.data.datasets = cumData.datasets;
+          // 축 라벨 언어 토글 반영
+          if (CHART_INSTANCES.cumulative.options?.scales) {
+            CHART_INSTANCES.cumulative.options.scales.x.title.text = this.t('cumulativeYearAxis');
+            CHART_INSTANCES.cumulative.options.scales.y.title.text = this.t('cumulativeValueAxis');
+          }
+          CHART_INSTANCES.cumulative.update('none');
+        }
 
         CHART_INSTANCES.lcoh.update('none');
         CHART_INSTANCES.npv.update('none');
