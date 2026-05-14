@@ -857,7 +857,7 @@
           <div class="chart-canvas-wrap"><canvas id="lcohChart"></canvas></div>
         </div>
         <div class="chart-card">
-          <h3 x-text="t('chartNpv')"></h3>
+          <h3 x-text="t('chartNpv') + ' · ' + baselineName()"></h3>
           <div class="chart-canvas-wrap"><canvas id="npvChart"></canvas></div>
         </div>
         <div class="chart-card">
@@ -1264,7 +1264,7 @@ const TRANSLATIONS = {
     chartPayback: '회수기간 비교',
     tabRevenue: '수익 모델',
     chartLcoh: 'LCOH 비교 (낮을수록 경제적)',
-    chartNpv: 'NPV vs 갈탄 (15년 누적, 양수=갈탄보다 경제적)',
+    chartNpv: 'NPV (15년 누적, 양수=흑자/이득)',
     chartCost: '연 순비용 비교',
     chartCo2: 'CO₂ 절감 분포 (vs 갈탄, tCO₂/yr)',
     verifyBanner: '검증 모드 — Excel SSoT 기준값과 JS 계산값을 비교합니다',
@@ -1399,7 +1399,7 @@ const TRANSLATIONS = {
     chartPayback: 'Payback comparison',
     tabRevenue: 'Revenue Model',
     chartLcoh: 'LCOH Comparison (lower = more economic)',
-    chartNpv: 'NPV vs Coal (15yr cumulative, positive = beats coal)',
+    chartNpv: 'NPV (15yr cumulative, positive = profit/gain)',
     chartCost: 'Annual Net Cost Comparison',
     chartCo2: 'CO₂ Savings Distribution (vs Coal, tCO₂/yr)',
     verifyBanner: 'Verification Mode — comparing JS calculations against Excel SSoT',
