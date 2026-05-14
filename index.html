@@ -2900,6 +2900,13 @@ function simulator() {
         const seen = localStorage.getItem('gigaette_heatingsim_v2_tut_seen');
         if (!seen) this.openTutorial();
       } catch (e) { /* localStorage blocked (file://): silently skip */ }
+
+      // 윈도우 크기 변경 시 모든 차트 명시적 resize (방어적)
+      window.addEventListener('resize', () => {
+        for (const k of Object.keys(CHART_INSTANCES)) {
+          try { CHART_INSTANCES[k].resize(); } catch (e) {}
+        }
+      });
     },
 
     // ===== Cost editor / 비용 편집기 =====
